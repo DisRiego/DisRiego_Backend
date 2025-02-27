@@ -4,6 +4,7 @@ from sqlalchemy import text
 from app.database import SessionLocal
 from fastapi.middleware.cors import CORSMiddleware
 
+
 app = FastAPI()
 
 # Configurar CORS
@@ -27,6 +28,15 @@ def get_db():
 def read_root():
     return {"message": "Infraestructura lista, backend en Render funcionando"}
 
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        
+
 @app.post("/login")
 def login(data: dict = Body(...), db: Session = Depends(get_db)):
     email = data.get("email")
@@ -42,7 +52,6 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Credenciales inválidas")
     
     return {"message": "Login exitoso", "name": result[0]}
-
 @app.get("/users")
 def check_db(db: Session = Depends(get_db)):
     try:
