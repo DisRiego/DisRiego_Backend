@@ -52,11 +52,3 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Credenciales inválidas")
     
     return {"message": "Login exitoso", "name": result[0]}
-@app.get("/users")
-def check_db(db: Session = Depends(get_db)):
-    try:
-        result = db.execute(text("SELECT * FROM users"))  # Usa text() para la consulta
-        users = result.fetchall()
-        return {"users": [dict(row._mapping) for row in users]}
-    except Exception as e:
-        return {"error": str(e)}
