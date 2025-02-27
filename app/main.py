@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal
 
+
 app = FastAPI()
 
 def get_db():
@@ -16,6 +17,15 @@ def get_db():
 @app.get("/")
 def read_root():
     return {"message": "Infraestructura lista, backend en Render funcionando"}
+
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        
 
 @app.post("/login")
 def login(data: dict = Body(...), db: Session = Depends(get_db)):
@@ -32,7 +42,6 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Credenciales inválidas")
     
     return {"message": "Login exitoso", "name": result[0]}
-
 @app.get("/users")
 def check_db(db: Session = Depends(get_db)):
     try:
