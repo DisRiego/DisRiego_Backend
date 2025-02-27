@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, Depends , Body
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from database import SessionLocal
+from app.database import SessionLocal
 
 
 app = FastAPI()
@@ -19,6 +19,14 @@ def read_root():
     return {"message": "Infraestructura lista, backend en Render funcionando"}
 
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+        
+
 @app.post("/login")
 def login(data: dict = Body(...), db: Session = Depends(get_db)):
     email = data.get("email")
@@ -34,3 +42,11 @@ def login(data: dict = Body(...), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Credenciales inválidas")
     
     return {"message": "Login exitoso", "name": result[0]}
+@app.get("/users")
+def check_db(db: Session = Depends(get_db)):
+    try:
+        result = db.execute(text("SELECT * FROM users"))  # Usa text() para la consulta
+        users = result.fetchall()
+        return {"users": [dict(row._mapping) for row in users]}
+    except Exception as e:
+        return {"error": str(e)}
