@@ -2,9 +2,19 @@ from fastapi import FastAPI, HTTPException, Request, Depends , Body
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import SessionLocal
+from fastapi.middleware.cors import CORSMiddleware
 
 
 app = FastAPI()
+
+# Configurar CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite todas las fuentes (puedes cambiarlo a ['http://localhost:5173'])
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos los métodos (GET, POST, etc.)
+    allow_headers=["*"],  # Permite todos los encabezados
+)
 
 def get_db():
     db = SessionLocal()
