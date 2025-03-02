@@ -6,7 +6,7 @@ from app.exceptions import setup_exception_handlers
 
 # **Configurar FastAPI**
 app = FastAPI(
-    title="Distrito de Riego API Gateway",
+    title="Distrito de Riego API Gateway - Gestion de usuario",
     description="API Gateway para gestión de usuarios, roles y permisos en el sistema de riego",
     version="1.0.0"
 )

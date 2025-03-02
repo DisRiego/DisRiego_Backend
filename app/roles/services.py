@@ -45,7 +45,14 @@ class PermissionService:
         """Obtener todos los permisos con manejo de errores"""
         try:
             return self.db.query(models.Permission).all()
+            return {
+                "detail": {
+                    "success": True,
+                    "data": permissions
+                }
+            }
         except SQLAlchemyError:
+            # agrega el registro del error a los logs
             raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los permisos."})
 
 
@@ -78,7 +85,8 @@ class RoleService:
             self.db.commit()
             self.db.refresh(db_role)
 
-            return {"detail": {"success": True, "data": "El rol se ha creado correctamente"}}
+            return db_role
+            # return {"detail": {"success": True, "data": "El rol se ha creado correctamente"}}
         except IntegrityError:
             self.db.rollback()
             raise HTTPException(status_code=400, detail="El rol ya existe.")

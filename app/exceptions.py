@@ -11,7 +11,7 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
         status_code=400,
         content={
             "success": False,
-            "message": "Error en los datos enviados",
+            "data": "Error en los datos enviados",
             "errors": error_messages
         }
     )
