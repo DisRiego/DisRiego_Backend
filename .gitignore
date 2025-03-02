@@ -1,5 +1,6 @@
 venv/
 app/__pycache__
+app/roles/__pycache__
 env
 
 /.env
