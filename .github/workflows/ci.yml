@@ -3,7 +3,7 @@ name: Test Backend
 on:
   push:
     branches:
-      - test  # Las pruebas se ejecutan cuando hay cambios en la rama `test`
+      - test  # Ejecutar las pruebas cuando se realice un push en la rama `test`
 
 jobs:
   test-backend:
@@ -16,13 +16,25 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.8'
+        python-version: '3.8'  # Ajusta la versión de Python según sea necesario
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt  
+        pip install -r requirements.txt  # Instalar las dependencias necesarias
 
-    - name: Run all tests
+    - name: Run tests and generate report
       run: |
-        pytest tests/  
+        # Ejecutar las pruebas en todas las carpetas de `tests/` y generar un reporte HTML
+        pytest --maxfail=5 --disable-warnings --html=reports/test_report.html tests/
+        
+    - name: Upload test report
+      uses: actions/upload-artifact@v2
+      with:
+        name: test-report
+        path: reports/test_report.html  # Sube el reporte HTML generado como artefacto
+
+    - name: Display report summary
+      run: |
+        echo "Test report is available here:"
+        echo "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts"
