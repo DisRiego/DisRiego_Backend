@@ -3,6 +3,7 @@ __pycache__/
 app/__pycache__
 app/roles/__pycache__
 env
+.pytest_cache/
 
 /.env
 .env

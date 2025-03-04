@@ -17,7 +17,7 @@ def list_roles(db: Session = Depends(get_db)):
     return role_service.get_roles()
     # return services.get_roles(db)
 
-@router.post("/permissions/", response_model=schemas.PermissionResponse)
+@router.post("/permissions/", response_model=schemas.SimpleResponse)
 def create_permission(permission: schemas.PermissionBase, db: Session = Depends(get_db)):
     permission_service = services.PermissionService(db)
     return permission_service.create_permission(permission)

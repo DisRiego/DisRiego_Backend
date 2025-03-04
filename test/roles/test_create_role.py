@@ -9,3 +9,9 @@ def test_create_role():
     assert response.status_code == 200
     assert "admin" in response.json()["name"]
     assert len(response.json()["permissions"]) > 0
+
+
+def test_get_roles():
+    response = client.get("/roles/")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)  # Asegura que se devuelve una lista de roles

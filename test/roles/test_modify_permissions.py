@@ -10,4 +10,4 @@ def test_update_role_permissions():
     response = client.put(f"/roles/{role_id}/permissions", json={"permissions": new_permissions})
     assert response.status_code == 200
     assert "message" in response.json()
-    assert "permissions updated" in response.json()["message"]
+    assert "Permisos actualizados correctamente" in response.json()["message"]

@@ -28,12 +28,7 @@ class PermissionService:
             self.db.add(db_permission)
             self.db.commit()
             self.db.refresh(db_permission)
-            return {
-                "detail": {
-                    "success": True,
-                    "data": "El permiso se ha creado correctamente"
-                }
-            }
+            return schemas.SimpleResponse(success=True, data="El permiso se ha creado correctamente")
         except IntegrityError:
             self.db.rollback()
             raise HTTPException(status_code=400, detail={"success": False, "data": "El permiso ya existe."})
@@ -89,7 +84,7 @@ class RoleService:
             # return {"detail": {"success": True, "data": "El rol se ha creado correctamente"}}
         except IntegrityError:
             self.db.rollback()
-            raise HTTPException(status_code=400, detail="El rol ya existe.")
+            raise HTTPException(status_code=401, detail="El rol ya existe.")
         except SQLAlchemyError:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="Error al crear el rol.")
