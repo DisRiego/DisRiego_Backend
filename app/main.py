@@ -3,6 +3,7 @@ from app.database import Base, engine
 from app.roles.routes import router as roles_router
 from app.middlewares import setup_middlewares
 from app.exceptions import setup_exception_handlers
+from app.password_change.routes import router as password_router
 
 # **Configurar FastAPI**
 app = FastAPI(
@@ -27,3 +28,5 @@ Base.metadata.create_all(bind=engine)
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {"status": "ok", "message": "API funcionando correctamente"}
+
+app.include_router(password_router)
