@@ -29,7 +29,7 @@ jobs:
         pytest --maxfail=5 --disable-warnings --html=reports/test_report.html tests/
         
     - name: Upload test report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
         name: test-report
         path: reports/test_report.html  # Sube el reporte HTML generado como artefacto
