@@ -25,11 +25,13 @@ jobs:
 
     - name: Run tests and generate report
       run: |
+        mkdir -p reports  # Crear la carpeta 'reports' si no existe
         # Ejecutar las pruebas en todas las carpetas de `tests/` y generar un reporte HTML
         pytest --maxfail=5 --disable-warnings --html=reports/test_report.html tests/
         
     - name: Upload test report
-      uses: actions/upload-artifact@v2
+      if: success()
+      uses: actions/upload-artifact@v4
       with:
         name: test-report
         path: reports/test_report.html  # Sube el reporte HTML generado como artefacto
