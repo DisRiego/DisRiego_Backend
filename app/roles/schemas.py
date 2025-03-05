@@ -1,5 +1,10 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Any
+
+# Respuesta simplificada con éxito y datos
+class SimpleResponse(BaseModel):
+    success: bool
+    data: Any  # Aquí se puede incluir el mensaje de éxito o los datos relevantes
 
 class PermissionBase(BaseModel):
     name: str
