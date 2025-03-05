@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from fastapi import HTTPException
 from app.roles import models, schemas
-from app.models import User
+from app.users.models import User
 
 class PermissionService:
     """Clase para gestionar los permisos"""

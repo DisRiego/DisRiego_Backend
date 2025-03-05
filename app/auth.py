@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from app import crud  # Importa las funciones de crud
-from app.models import User
+from app.users import services  # Importa las funciones de crud
+from app.users.models import User
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import os
@@ -32,4 +32,4 @@ class AuthService:
 
     def get_user(self, db: Session, username: str) -> Optional[User]:
         """Obtiene un usuario de la base de datos utilizando el username"""
-        return crud.get_user_by_username(db, username)
+        return services.get_user_by_username(db, username)
