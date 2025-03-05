@@ -6,7 +6,6 @@ from app.middlewares import setup_middlewares
 from app.exceptions import setup_exception_handlers
 
 
-
 # **Configurar FastAPI**
 app = FastAPI(
     title="Distrito de Riego API Gateway - Gestion de usuario",
@@ -22,7 +21,6 @@ setup_exception_handlers(app)
 
 # **Registrar Rutas**
 app.include_router(roles_router)
-
 app.include_router( auth_router)
 
 # **Crear tablas si no existen**
