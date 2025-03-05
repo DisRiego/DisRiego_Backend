@@ -33,3 +33,15 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+# Esquema para el restablecimiento de contraseña
+class ResetPasswordRequest(BaseModel):
+    email: str  # El email es lo único necesario para solicitar el restablecimiento
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+    token: str
+
+class UpdatePasswordRequest(BaseModel):
+    token: str
+    new_password: str

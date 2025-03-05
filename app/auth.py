@@ -35,29 +35,3 @@ class AuthService:
     def get_user(self, db: Session, username: str) -> Optional[User]:
         """Obtiene un usuario de la base de datos utilizando el username"""
         return services.get_user_by_username(db, username)
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-def reset_password(db: Session, token: str, new_password: str):
-    # Verificar el token
-    password_reset = get_reset_token(db, token)
-    if not password_reset:
-        raise HTTPException(status_code=404, detail="Invalid token")
-    
-    if password_reset.expiration < datetime.datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Token expired")
-
-    # Obtener el usuario asociado al correo electrónico
-    user = db.query(User).filter(User.email == password_reset.email).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Cambiar la contraseña
-    user.password = pwd_context.hash(new_password)
-    db.commit()
-
-    # Eliminar el token
-    db.delete(password_reset)
-    db.commit()
-
-    return {"detail": "Password successfully updated"}
