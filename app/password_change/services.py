@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from app.auth.auth_service import AuthService
+from app.auth.security import verify_password, hash_password  # Importa desde security.py
 from app.models import User
 
 class PasswordChangeService:
@@ -8,7 +8,6 @@ class PasswordChangeService:
 
     def __init__(self, db: Session):
         self.db = db
-        self.auth_service = AuthService()
 
     def change_password(self, user_id: int, old_password: str, new_password: str, confirm_password: str):
         """Lógica para cambiar la contraseña de un usuario"""
@@ -19,7 +18,7 @@ class PasswordChangeService:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
         # Verificar si la contraseña actual es correcta
-        if not self.auth_service.verify_password(old_password, user.password):
+        if not verify_password(old_password, user.password):
             raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
         # Validar que las contraseñas coincidan
@@ -31,7 +30,7 @@ class PasswordChangeService:
             raise HTTPException(status_code=400, detail="La nueva contraseña debe incluir al menos 12 caracteres con mayúsculas, minúsculas y números")
 
         # Hashear la nueva contraseña y guardarla
-        user.password = self.auth_service.get_password_hash(new_password)
+        user.password = hash_password(new_password)
         self.db.commit()
 
         return {"message": "Contraseña actualizada correctamente"}
