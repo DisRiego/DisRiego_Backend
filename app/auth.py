@@ -33,3 +33,10 @@ class AuthService:
     def get_user(self, db: Session, username: str) -> Optional[User]:
         """Obtiene un usuario de la base de datos utilizando el username"""
         return services.get_user_by_username(db, username)
+    
+    def revoke_token(self, db: Session, token: str, expires_at: datetime):
+        """Revoca un token, agregándolo a la lista de revocación."""
+        db_revoked = RevokedToken(token=token, expires_at=expires_at)
+        db.add(db_revoked)
+        db.commit()
+        return {"message": "Token revocado correctamente"}
