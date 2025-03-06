@@ -186,6 +186,8 @@ class UserService:
 
         return {"message": "Password successfully updated"}
 
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+
 
 
 class AuthService:
