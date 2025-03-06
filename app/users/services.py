@@ -163,25 +163,32 @@ class UserService:
 
     def update_password(self, token: str, new_password: str):
         """Restablecer la contraseña con el token y la nueva contraseña"""
-        # Verificar si el token es válido
+        
+        # Buscar la solicitud de restablecimiento de contraseña usando el token
         password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
         if not password_reset:
             raise HTTPException(status_code=404, detail="Invalid or expired token")
         
+        # Verificar que el token no haya expirado
         if password_reset.expiration < datetime.utcnow():
             raise HTTPException(status_code=400, detail="Token expired")
-
-        # Obtener al usuario
+        
+        # Buscar el usuario asociado al email en la solicitud de reset
         user = self.db.query(User).filter(User.email == password_reset.email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Actualizar la contraseña
-        hashed_password = pwd_context.hash(new_password)
+        # Generar un nuevo salt y hash para la nueva contraseña utilizando scrypt
+        salt, hashed_password = self.hash_password(new_password)
+        
+        # Actualizar ambos campos: la contraseña y el salt
         user.password = hashed_password
+        user.password_salt = salt
+        
+        # Confirmar los cambios en la base de datos
         self.db.commit()
-
-        # Eliminar el token después de usarlo
+        
+        # Eliminar la solicitud de restablecimiento para que el token no se pueda reutilizar
         self.db.delete(password_reset)
         self.db.commit()
 
@@ -193,7 +200,9 @@ class UserService:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
 
+
 # Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
+
 class AuthService:
     def __init__(self):
         self.secret_key = SECRET_KEY
