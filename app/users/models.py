@@ -2,10 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
-
-from app.roles.models import Role, user_role_table  # Importamos correctamente los modelos de roles
-import datetime
-
+from app.roles.models import Role, user_role_table  # Asegúrate de que estos existan
 
 class User(Base):
     """Modelo de Usuario"""
@@ -35,17 +32,6 @@ class User(Base):
 
     __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
 
-    
-class PasswordReset(Base):
-    """Modelo para los tokens de restablecimiento de contraseña"""
-    __tablename__ = "password_resets"
-
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, index=True)
-    token = Column(String, unique=True)
-    expiration = Column(DateTime, default=datetime.datetime.utcnow)
-
-
 class RevokedToken(Base):
     """Modelo para almacenar tokens revocados (para cierre de sesión)"""
     __tablename__ = "revoked_tokens"
@@ -56,4 +42,3 @@ class RevokedToken(Base):
 
     def has_expired(self):
         return datetime.utcnow() > self.expires_at
-

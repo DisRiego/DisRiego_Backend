@@ -2,19 +2,19 @@ import os
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
-from app.users.models import User, PasswordReset,RevokedToken  # Asegúrate de que el modelo User esté correctamente importado
+from app.users.models import User, RevokedToken  # Ahora importamos también RevokedToken
 from app.database import Base
 from fastapi import HTTPException
-import uuid
-from passlib.context import CryptContext
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 from Crypto.Protocol.KDF import scrypt
+from app.auth import AuthService
+
 
 # Constantes para autenticación
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -105,7 +105,8 @@ class UserService:
     def authenticate_user(self, email: str, password: str):
         try:
             user = self.get_user_by_username(email)
-            if not user or not self.verify_password(user.password_salt, user.password, password):
+            auth_service= AuthService()
+            if not user or not auth_service.verify_password(password, user.password):
                 raise HTTPException(status_code=401, detail="Credenciales inválidas")
             return user
         except Exception as e:
@@ -137,59 +138,9 @@ class UserService:
             return {"success": True, "data": "Usuario actualizado correctamente"}
         except Exception as e:
             self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
-            raise HTTPException(status_code=500, detail={
-                "success": False,
-                "data": f"Error al crear el usuario: {str(e)}"
-            })
-    def generate_reset_token(self, email: str):
-        """Generar un token para restablecer la contraseña"""
-        token = str(uuid.uuid4())  # Genera un token único
-        expiration_time = datetime.utcnow() + timedelta(hours=1)  # Token válido por 1 hora
-        
-        password_reset = PasswordReset(email=email, token=token, expiration=expiration_time)
-        self.db.add(password_reset)
-        self.db.commit()
-
-        return token
-
-    def update_password(self, token: str, new_password: str):
-        """Restablecer la contraseña con el token y la nueva contraseña"""
-        
-        # Buscar la solicitud de restablecimiento de contraseña usando el token
-        password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
-        if not password_reset:
-            raise HTTPException(status_code=404, detail="Invalid or expired token")
-        
-        # Verificar que el token no haya expirado
-        if password_reset.expiration < datetime.utcnow():
-            raise HTTPException(status_code=400, detail="Token expired")
-        
-        # Buscar el usuario asociado al email en la solicitud de reset
-        user = self.db.query(User).filter(User.email == password_reset.email).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Generar un nuevo salt y hash para la nueva contraseña utilizando scrypt
-        salt, hashed_password = self.hash_password(new_password)
-        
-        # Actualizar ambos campos: la contraseña y el salt
-        user.password = hashed_password
-        user.password_salt = salt
-        
-        # Confirmar los cambios en la base de datos
-        self.db.commit()
-        
-        # Eliminar la solicitud de restablecimiento para que el token no se pueda reutilizar
-        self.db.delete(password_reset)
-        self.db.commit()
-
-        return {"message": "Password successfully updated"}
-
-        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
-
-
-
+# Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
 class AuthService:
     def __init__(self):
         self.secret_key = SECRET_KEY
@@ -204,4 +155,39 @@ class AuthService:
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Error al revocar el token: {str(e)}")
+
+
+class PasswordChangeService:
+    """Servicio para gestionar el cambio de contraseña"""
+
+    def __init__(self, db: Session, user_id: int, old_password: str, new_password: str, confirm_password: str):
+        self.db = db
+        self.user_id = user_id
+        self.old_password = old_password
+        self.new_password = new_password
+        self.confirm_password = confirm_password
+
+    def change_password(self):
+        """Lógica para cambiar la contraseña de un usuario"""
+        try:
+            user = self.db.query(User).filter(User.id == self.user_id).first()
+            if not user:
+                return {"error": "Usuario no encontrado"}
+
+            auth_service = AuthService()
+            if not auth_service.verify_password(self.old_password, user.password):
+                return {"error": "Contraseña antigua incorrecta"}
+
+            if self.new_password != self.confirm_password:
+                return {"error": "Las contraseñas no coinciden"}
+
+            # Generar el hash de la nueva contraseña
+            user.password = auth_service.get_password_hash(self.new_password)
+            self.db.commit()
+
+            return {"message": "Contraseña actualizada correctamente"}
+
+        except Exception as e:
+            self.db.rollback()
+            return {"error": f"Error interno al cambiar la contraseña: {str(e)}"}
 

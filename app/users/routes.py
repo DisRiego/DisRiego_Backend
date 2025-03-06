@@ -5,6 +5,9 @@ from app.database import get_db
 from app.users import schemas, services
 from datetime import datetime
 from jose import jwt, JWTError
+from app.users.schemas import ChangePasswordRequest
+from app.auth import AuthService
+from app.users.services import PasswordChangeService
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -12,32 +15,6 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/", response_model=list[schemas.UserResponse])
 def list_users(db: Session = Depends(get_db)):
-
-    role_service = services.User(db)
-    return role_service.get_roles()
-    # return services.get_roles(db)
-    
-
-@router.post("/request-reset-password", response_model=schemas.ResetPasswordResponse)
-def request_reset_password(
-    reset_password_request: schemas.ResetPasswordRequest, 
-    db: Session = Depends(get_db)
-):
-    user_service = services.UserService(db)
-    user_service.get_user_by_username(reset_password_request.email)  #
-    token = user_service.generate_reset_token(reset_password_request.email)
-    return schemas.ResetPasswordResponse(message="Reset link generated", token=token)
-
-@router.post("/reset-password/{token}", response_model=schemas.ResetPasswordResponse)
-def reset_password(
-    token: str, 
-    update_password_request: schemas.UpdatePasswordRequest, 
-    db: Session = Depends(get_db)
-):
-    user_service = services.UserService(db)
-    user_service.update_password(token, update_password_request.new_password)
-    return schemas.ResetPasswordResponse(message="Password successfully updated", token=token)
-
     user_service = services.UserService(db)
     
     return []  
@@ -74,4 +51,18 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         return {"message": "Cierre de sesión exitoso"}
     except JWTError:
         raise HTTPException(status_code=400, detail="Token inválido")
+
+@router.put("/change", response_model=dict)
+def update_password(
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(lambda db: AuthService().get_user(db, "email@test.com"))
+):
+    password_service = PasswordChangeService(db, current_user.id, request.old_password, request.new_password, request.confirm_password)
+    response = password_service.change_password()
+
+    if isinstance(response, dict):
+        return response  # Asegura que solo se devuelva un JSON válido
+    else:
+        return {"error": "No se pudo actualizar la contraseña"}
 
