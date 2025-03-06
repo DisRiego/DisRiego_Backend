@@ -27,12 +27,13 @@ class UserResponse(UserBase):
     email: Optional[str] = None
 
     class Config:
-        orm_mode = True  # Esto permite que SQLAlchemy funcione con Pydantic
+        orm_mode = True  
 
 # Modelo de token para la autenticación
 class Token(BaseModel):
     access_token: str
     token_type: str
+
 
 # Esquema para el restablecimiento de contraseña
 class ResetPasswordRequest(BaseModel):
@@ -45,3 +46,15 @@ class ResetPasswordResponse(BaseModel):
 class UpdatePasswordRequest(BaseModel):
     token: str
     new_password: str
+
+# Modelo para el login de usuario
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UpdateUserRequest(BaseModel):
+    user_id: int
+    new_address: Optional[str] = None
+    new_profile_picture: Optional[str] = None
+    new_phone: Optional[str] = None
+
