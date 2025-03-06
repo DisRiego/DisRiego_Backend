@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from app.database import Base, engine
 from app.users.routes import router as users_router
 from app.roles.routes import router as roles_router
+from app.users.routes import router as users_router
 from app.middlewares import setup_middlewares
 from app.exceptions import setup_exception_handlers
 
@@ -21,7 +22,6 @@ setup_exception_handlers(app)
 # **Registrar Rutas**
 app.include_router(roles_router)
 app.include_router(users_router)
-
 # **Crear tablas si no existen**
 Base.metadata.create_all(bind=engine)
 
