@@ -23,3 +23,17 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
 
     access_token = services.create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer"}
+    # return services.get_roles(db)
+
+@router.post("/update", response_model=dict)
+def updater(
+    update: schemas.UpdateUserRequest,  
+    db: Session = Depends(get_db)
+):
+    update_user_service = services.UserService(db)
+    return update_user_service.update_user(
+        user_id=update.user_id,
+        new_address=update.new_address,
+        new_profile_picture=update.new_profile_picture,
+        new_phone=update.new_phone
+    )

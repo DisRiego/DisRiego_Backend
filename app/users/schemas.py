@@ -38,3 +38,9 @@ class Token(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class UpdateUserRequest(BaseModel):
+    user_id: int
+    new_address: Optional[str] = None
+    new_profile_picture: Optional[str] = None
+    new_phone: Optional[str] = None

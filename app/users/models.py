@@ -24,7 +24,6 @@ class User(Base):
     address = Column(String, nullable=True)
     profile_picture = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    email = Column(String, unique=True, nullable=True)
 
     # Relación con roles
     roles = relationship("Role", secondary=user_role_table, back_populates="users")

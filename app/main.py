@@ -21,7 +21,6 @@ setup_exception_handlers(app)
 # **Registrar Rutas**
 app.include_router(roles_router)
 app.include_router(users_router)
-
 # **Crear tablas si no existen**
 Base.metadata.create_all(bind=engine)
 
