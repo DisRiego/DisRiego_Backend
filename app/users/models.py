@@ -2,8 +2,10 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
+
 from app.roles.models import Role, user_role_table  # Importamos correctamente los modelos de roles
 import datetime
+
 
 class User(Base):
     """Modelo de Usuario"""

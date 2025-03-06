@@ -4,11 +4,18 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 
+
 from app.users.models import User, RevokedToken , PasswordReset  # Ahora importamos también RevokedToken
 from app.database import Base
 from fastapi import HTTPException
-from jose import JWTError, jwt
+
+from app.users.models import User, PasswordReset,RevokedToken  # Asegúrate de que el modelo User esté correctamente importado
+from app.database import Base
+from fastapi import HTTPException
+import uuid
 from passlib.context import CryptContext
+
+from jose import JWTError, jwt
 from Crypto.Protocol.KDF import scrypt
 import uuid
 # Constantes para autenticación
@@ -180,7 +187,7 @@ class UserService:
 
         return {"message": "Password successfully updated"}
 
-            raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+            #raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
 # Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
 class AuthService:
