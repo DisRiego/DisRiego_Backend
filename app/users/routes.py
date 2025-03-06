@@ -53,16 +53,17 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Token inválido")
 
 @router.put("/change", response_model=dict)
+@router.put("/change", response_model=dict)
 def update_password(
     request: ChangePasswordRequest,
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(lambda db: AuthService().get_user(db, "email@test.com"))
+    current_user: dict = Depends(lambda: AuthService().get_user),  
+    db: Session = Depends(get_db) 
 ):
-    password_service = PasswordChangeService(db, current_user.id, request.old_password, request.new_password, request.confirm_password)
+    password_service = PasswordChangeService(db, current_user["id"], request.old_password, request.new_password, request.confirm_password)
     response = password_service.change_password()
 
     if isinstance(response, dict):
-        return response  # Asegura que solo se devuelva un JSON válido
+        return response  
     else:
         return {"error": "No se pudo actualizar la contraseña"}
 
