@@ -117,7 +117,7 @@ class UserService:
                 raise HTTPException(status_code=401, detail="Credenciales inválidas")
             return user
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al autenticar al usuario: {str(e)}")
+            raise HTTPException(status_code=401, detail=f"Error al autenticar al usuario: {str(e)}")
 
     def create_access_token(self, data: dict, expires_delta: timedelta = None):
         try:
@@ -146,7 +146,7 @@ class UserService:
         except Exception as e:
             self.db.rollback()
 
-            raise HTTPException(status_code=500, detail={
+            raise HTTPException(status_code=404, detail={
                 "success": False,
                 "data": f"Error al crear el usuario: {str(e)}"
             })

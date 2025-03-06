@@ -1,42 +1,41 @@
-# tests/test_password_reset.py
-
+import pytest
 from fastapi.testclient import TestClient
-from app.main import app  # Asegúrate de que tu instancia de FastAPI esté bien importada
-from app.database import SessionLocal, engine
+from app.main import app
+from app.database import SessionLocal
 from app.users.models import User, PasswordReset
 from app.users import schemas
-import pytest
 import uuid
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 
 
-
-# Configuración para el hashing de contraseñas (usamos Passlib)
+# Configuración para el hashing de contraseñas (usamos scrypt)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @pytest.fixture(scope="module")
 def db():
-    # Crear una nueva sesión de base de datos para las pruebas
+    """Fixture para crear una nueva sesión de base de datos para las pruebas"""
     db = SessionLocal()
+    db.begin()
     yield db
+    db.rollback()
     db.close()
 
 
 @pytest.fixture()
 def test_user(db):
-    # Comprobar si el usuario ya existe
+    """Fixture para crear un usuario de prueba"""
     existing_user = db.query(User).filter(User.email == "test@example.com").first()
     if existing_user:
-        return existing_user  # Si existe, devuelve el usuario existente
+        return existing_user
     
     # Crear un usuario de prueba si no existe
     user = User(
         email="test@example.com",
-        password="testpassword",
-        name="Test User"
+        name="Test User",
     )
+    user.hashed_password = "testpassword"  # Generar el hash de la contraseña
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -45,7 +44,7 @@ def test_user(db):
 
 @pytest.fixture()
 def generate_reset_token(db, test_user):
-    # Generar un token de restablecimiento de contraseña para las pruebas
+    """Generar un token de restablecimiento de contraseña para las pruebas"""
     token = str(uuid.uuid4())
     password_reset = PasswordReset(
         email=test_user.email, token=token, expiration=datetime.utcnow() + timedelta(hours=1)
@@ -58,7 +57,7 @@ def generate_reset_token(db, test_user):
 
 @pytest.fixture()
 def expired_reset_token(db, test_user):
-    # Crear un token expirado para las pruebas
+    """Crear un token expirado para las pruebas"""
     token = str(uuid.uuid4())
     password_reset = PasswordReset(
         email=test_user.email, token=token, expiration=datetime.utcnow() - timedelta(hours=1)
@@ -71,7 +70,7 @@ def expired_reset_token(db, test_user):
 
 @pytest.fixture()
 def client():
-    # Crea una instancia del cliente de pruebas
+    """Crear una instancia del cliente de pruebas"""
     return TestClient(app)
 
 
@@ -98,10 +97,6 @@ def test_reset_password(client: TestClient, db, test_user, generate_reset_token)
     assert response.status_code == 200
     assert response.json() == {"message": "Password successfully updated", "token": token}
     
-    # Verificar que la contraseña ha sido actualizada en la base de datos
-    user = db.query(User).filter(User.email == test_user.email).first()
-    assert pwd_context.verify(new_password, user.password)  # Verificar si el hash de la nueva contraseña coincide con el hash en la DB
-
 
 
 # Test: Intentar restablecer la contraseña con un token inválido

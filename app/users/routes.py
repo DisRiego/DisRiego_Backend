@@ -47,7 +47,7 @@ def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     user_service = services.UserService(db)
     user = user_service.authenticate_user(user_credentials.email, user_credentials.password)
     if user is None:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
     access_token = user_service.create_access_token(data={"sub": str(user.email)})
     return {"access_token": access_token, "token_type": "bearer"}
 
