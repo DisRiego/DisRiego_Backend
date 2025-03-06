@@ -13,17 +13,15 @@ def list_users(db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.Token)
 def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = services.authenticate_user(db, user_credentials.email, user_credentials.password)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    user_service = services.UserService(db)
+    # user_service.generate_salt_and_hash(user_credentials.password)
+    user = user_service.authenticate_user(user_credentials.email, user_credentials.password)
 
-    access_token = services.create_access_token(data={"sub": user.email})
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = user_service.create_access_token(data={"sub": str(user.email)})
     return {"access_token": access_token, "token_type": "bearer"}
-    # return services.get_roles(db)
 
 @router.post("/update", response_model=dict)
 def updater(

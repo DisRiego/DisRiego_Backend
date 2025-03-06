@@ -10,6 +10,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     password = Column(String)
+    password_salt = Column(String)
     name = Column(String)
     email_status = Column(Boolean, nullable=True)  # Boolean para el estado del email
     type_document_id = Column(Integer, nullable=True)  # Integer para tipo de documento
