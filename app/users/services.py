@@ -80,3 +80,34 @@ class UserService:
                 "success": False,
                 "data": f"Error al crear el usuario: {str(e)}"
             })
+        
+    def update_user(self, user_id, new_address:Optional[str] , new_profile_picture:Optional[str] , new_phone:Optional[str]):
+        try:
+            db_user = self.db.query(User).filter(User.id == user_id).first()
+            if not db_user:
+                raise HTTPException(status_code=404, detail={
+                     "success": False,
+                     "data": "Usuario no encontrando"
+                })
+                
+            if new_address is not None:
+                db_user.address = new_address
+            if new_profile_picture is not None:
+                db_user.profile_picture=new_profile_picture
+            if new_phone is not None:
+                db_user.phone = new_phone               
+                
+            self.db.commit()
+
+            self.db.refresh(db_user)
+            return{
+                "success":True,
+                "data": "Usuario Actualizado correctamente"
+            }
+            
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail={
+                "success": False,
+                "data": f"Error al actualizar el usuario: {str(e)}"
+            })
