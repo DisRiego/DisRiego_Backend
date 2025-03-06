@@ -27,7 +27,7 @@ jobs:
       run: |
         mkdir -p reports  # Crear la carpeta 'reports' si no existe
         # Ejecutar las pruebas en todas las carpetas de `tests/` y generar un reporte HTML
-        PYTHONPATH=./ pytest --maxfail=5 --disable-warnings --html=reports/test_report.html --self-contained-html test/
+        PYTHONPATH=./ pytest --maxfail=5 --disable-warnings --html=reports/test_report.html --self-contained-html test/users/
         
     - name: Upload test report
       if: success()

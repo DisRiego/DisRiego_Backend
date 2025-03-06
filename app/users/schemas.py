@@ -34,6 +34,19 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+
+# Esquema para el restablecimiento de contraseña
+class ResetPasswordRequest(BaseModel):
+    email: str  # El email es lo único necesario para solicitar el restablecimiento
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+    token: str
+
+class UpdatePasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
 # Modelo para el login de usuario
 class UserLogin(BaseModel):
     email: str
@@ -44,3 +57,4 @@ class UpdateUserRequest(BaseModel):
     new_address: Optional[str] = None
     new_profile_picture: Optional[str] = None
     new_phone: Optional[str] = None
+

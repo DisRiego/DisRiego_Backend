@@ -2,17 +2,20 @@ import os
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
-from app.users.models import User, RevokedToken  # Ahora importamos también RevokedToken
+
+
+from app.users.models import User, RevokedToken , PasswordReset  # Ahora importamos también RevokedToken
 from app.database import Base
 from fastapi import HTTPException
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from Crypto.Protocol.KDF import scrypt
-
+import uuid
 # Constantes para autenticación
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -135,6 +138,48 @@ class UserService:
             return {"success": True, "data": "Usuario actualizado correctamente"}
         except Exception as e:
             self.db.rollback()
+
+            raise HTTPException(status_code=500, detail={
+                "success": False,
+                "data": f"Error al crear el usuario: {str(e)}"
+            })
+    def generate_reset_token(self, email: str):
+        """Generar un token para restablecer la contraseña"""
+        token = str(uuid.uuid4())  # Genera un token único
+        expiration_time = datetime.utcnow() + timedelta(hours=1)  # Token válido por 1 hora
+        
+        password_reset = PasswordReset(email=email, token=token, expiration=expiration_time)
+        self.db.add(password_reset)
+        self.db.commit()
+
+        return token
+
+    def update_password(self, token: str, new_password: str):
+        """Restablecer la contraseña con el token y la nueva contraseña"""
+        # Verificar si el token es válido
+        password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
+        if not password_reset:
+            raise HTTPException(status_code=404, detail="Invalid or expired token")
+        
+        if password_reset.expiration < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="Token expired")
+
+        # Obtener al usuario
+        user = self.db.query(User).filter(User.email == password_reset.email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Actualizar la contraseña
+        hashed_password = pwd_context.hash(new_password)
+        user.password = hashed_password
+        self.db.commit()
+
+        # Eliminar el token después de usarlo
+        self.db.delete(password_reset)
+        self.db.commit()
+
+        return {"message": "Password successfully updated"}
+
             raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
 # Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
@@ -152,3 +197,4 @@ class AuthService:
         except Exception as e:
             db.rollback()
             raise HTTPException(status_code=500, detail=f"Error al revocar el token: {str(e)}")
+

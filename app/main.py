@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.database import Base, engine
+from app.users.routes import router as users_router
 from app.roles.routes import router as roles_router
 from app.users.routes import router as users_router
 from app.middlewares import setup_middlewares
