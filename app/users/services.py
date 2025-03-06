@@ -179,7 +179,7 @@ class UserService:
 
         return {"message": "Password successfully updated"}
 
-            raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
 # Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
 class AuthService:
