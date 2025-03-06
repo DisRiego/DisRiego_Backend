@@ -2,29 +2,27 @@ import os
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime, timedelta
-from app.users.models import User  
+from app.users.models import User, RevokedToken  # Ahora importamos también RevokedToken
 from app.database import Base
 from fastapi import HTTPException
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from Crypto.Protocol.KDF import scrypt
 
-# Constantes de configuración para la autenticación y hash de contraseñas
+# Constantes para autenticación
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Contexto para la creación de hashes de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class UserService:
-    """Clase para gestionar la creación y obtención de usuarios"""
+    """Clase para gestionar la creación, autenticación y actualización de usuarios"""
 
     def __init__(self, db: Session):
         self.db = db
 
     def get_user_by_username(self, username: str):
-        """Obtener un usuario por su nombre de usuario (email)"""
         try:
             user = self.db.query(User).filter(User.email == username).first()
             if not user:
@@ -52,10 +50,8 @@ class UserService:
         profile_picture: Optional[str] = None,
         phone: Optional[str] = None
     ):
-        """Crear un nuevo usuario con todos los campos"""
         try:
             salt, hashed_password = self.hash_password(password)
-
             db_user = User(
                 email=email,
                 password=hashed_password,
@@ -75,7 +71,6 @@ class UserService:
                 profile_picture=profile_picture,
                 phone=phone
             )
-            
             self.db.add(db_user)
             self.db.commit()
             self.db.refresh(db_user)
@@ -84,32 +79,28 @@ class UserService:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Error al crear el usuario: {str(e)}")
 
-    def hash_password(self, password: str) -> str:
-        """Generar un hash de la contraseña con salt aleatorio"""
+    def hash_password(self, password: str) -> tuple:
         try:
-            salt = os.urandom(16)  # Usar un salt aleatorio
+            salt = os.urandom(16)
             key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
-            return salt.hex(), key.hex()  # Devolvemos tanto el salt como el hash
+            return salt.hex(), key.hex()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al generar el hash de la contraseña: {str(e)}")
 
     def verify_password(self, stored_salt: str, stored_hash: str, password: str) -> bool:
-        """Verificar la contraseña ingresada contra el hash almacenado"""
         try:
-            # Validar que el salt sea una cadena hexadecimal válida
-            bytes.fromhex(stored_salt)  # Intentar convertir el salt
+            bytes.fromhex(stored_salt)
         except ValueError:
             raise HTTPException(status_code=400, detail="El salt almacenado no es una cadena hexadecimal válida.")
         
         try:
-            salt = bytes.fromhex(stored_salt)  # Convertir el salt de vuelta a bytes
-            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)  # Recalcular el hash
-            return key.hex() == stored_hash  # Comparar el hash calculado con el almacenado
+            salt = bytes.fromhex(stored_salt)
+            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
+            return key.hex() == stored_hash
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al verificar la contraseña: {str(e)}")
 
     def authenticate_user(self, email: str, password: str):
-        """Autenticar al usuario comparando la contraseña ingresada con la almacenada"""
         try:
             user = self.get_user_by_username(email)
             if not user or not self.verify_password(user.password_salt, user.password, password):
@@ -119,7 +110,6 @@ class UserService:
             raise HTTPException(status_code=500, detail=f"Error al autenticar al usuario: {str(e)}")
 
     def create_access_token(self, data: dict, expires_delta: timedelta = None):
-        """Crear un token de acceso JWT"""
         try:
             to_encode = data.copy()
             expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
@@ -130,34 +120,35 @@ class UserService:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
 
     def update_user(self, user_id: int, new_address: Optional[str] = None, new_profile_picture: Optional[str] = None, new_phone: Optional[str] = None):
-        """Actualizar la información de un usuario"""
         try:
             db_user = self.db.query(User).filter(User.id == user_id).first()
             if not db_user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
-                
             if new_address is not None:
                 db_user.address = new_address
             if new_profile_picture is not None:
                 db_user.profile_picture = new_profile_picture
             if new_phone is not None:
                 db_user.phone = new_phone
-
             self.db.commit()
             self.db.refresh(db_user)
             return {"success": True, "data": "Usuario actualizado correctamente"}
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
-    
-    # def generate_salt_and_hash(self, password: str):
-    #     """Generar un salt y un hash para una contraseña"""
-    #     # Generar un salt aleatorio
-    #     salt = os.urandom(16)  # 16 bytes de salt aleatorio
-        
-    #     # Generar el hash de la contraseña utilizando scrypt
-    #     key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
-        
-    #     # Imprimir el salt (en formato hexadecimal) y el hash generado
-    #     print("Salt:", salt.hex())  # Imprimir salt en formato hexadecimal
-    #     print("Hash:", key.hex())  # Imprimir hash en formato hexadecimal
+
+# Clase para gestionar la autenticación y cierre de sesión (revocación de tokens)
+class AuthService:
+    def __init__(self):
+        self.secret_key = SECRET_KEY
+
+    def revoke_token(self, db: Session, token: str, expires_at: datetime):
+        """Revocar un token (guardar en la base de datos como revocado)"""
+        try:
+            revoked = RevokedToken(token=token, expires_at=expires_at)
+            db.add(revoked)
+            db.commit()
+            return {"success": True, "data": "Token revocado"}
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al revocar el token: {str(e)}")
