@@ -27,9 +27,14 @@ class UserResponse(UserBase):
     email: Optional[str] = None
 
     class Config:
-        orm_mode = True  # Esto permite que SQLAlchemy funcione con Pydantic
+        orm_mode = True  
 
 # Modelo de token para la autenticación
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+# Modelo para el login de usuario
+class UserLogin(BaseModel):
+    email: str
+    password: str

@@ -1,9 +1,18 @@
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime
-from app.users.models import User  # Asegúrate de que el modelo User esté correctamente importado
+from datetime import datetime, timedelta
+from app.users.models import User  
 from app.database import Base
 from fastapi import HTTPException
+from jose import JWTError, jwt
+import bcrypt
+
+SECRET_KEY = "your_secret_key"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 class UserService:
     """Clase para gestionar la creación y obtención de usuarios"""
@@ -50,7 +59,7 @@ class UserService:
         try:
             db_user = User(
                 email=email,
-                password=password,
+                password=hash_password(password),  # Guarda la contraseña hasheada
                 name=name,
                 email_status=email_status,
                 type_document_id=type_document_id,
@@ -80,3 +89,22 @@ class UserService:
                 "success": False,
                 "data": f"Error al crear el usuario: {str(e)}"
             })
+
+    def get_user_by_email(db: Session, email: str):
+        return db.query(User).filter(User.email == email).first()
+
+    def verify_password(plain_password, hashed_password):
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+
+    def authenticate_user(db: Session, email: str, password: str):
+        user = UserService.get_user_by_email(db, email)
+        if not user or not UserService.verify_password(password, user.password):
+            return None
+        return user
+
+    def create_access_token(data: dict, expires_delta: timedelta = None):
+        to_encode = data.copy()
+        expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        to_encode.update({"exp": expire})
+        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        return encoded_jwt
