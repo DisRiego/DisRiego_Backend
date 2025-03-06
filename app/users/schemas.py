@@ -33,3 +33,10 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+
+class UpdateUserRequest(BaseModel):
+    user_id: int
+    new_address: Optional[str] = None
+    new_profile_picture: Optional[str] = None
+    new_phone: Optional[str] = None
