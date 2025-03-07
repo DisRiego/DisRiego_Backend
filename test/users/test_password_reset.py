@@ -87,7 +87,7 @@ def test_request_reset_password(client: TestClient, db, test_user):
 # Test: Restablecer contraseña con un token válido
 def test_reset_password(client: TestClient, db, test_user, generate_reset_token):
     token, _ = generate_reset_token
-    new_password = "newpassword123"
+    new_password = "Newpassword123."
     
     response = client.post(
         f"/users/reset-password/{token}",
@@ -104,7 +104,7 @@ def test_reset_password_invalid_token(client: TestClient, db, test_user):
     invalid_token = str(uuid.uuid4())  # Un token que no existe
     response = client.post(
         f"/users/reset-password/{invalid_token}",
-        json={"token": invalid_token, "new_password": "newpassword123"}
+        json={"token": invalid_token, "new_password": "Newpassword123."}
     )
     assert response.status_code == 404
     assert response.json() == {"detail": "Invalid or expired token"}
@@ -115,7 +115,7 @@ def test_reset_password_expired_token(client: TestClient, db, expired_reset_toke
     token, _ = expired_reset_token
     response = client.post(
         f"/users/reset-password/{token}",
-        json={"token": token, "new_password": "newpassword123"}
+        json={"token": token, "new_password": "Newpassword123."}
     )
     assert response.status_code == 400
     assert response.json() == {"detail": "Token expired"}
