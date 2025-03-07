@@ -16,7 +16,7 @@ def setup_db():
 
 def test_logout_success(setup_db):
     # Simular un login exitoso y obtener un token
-    response = client.post("/users/login", json={"email": "juan.perez@example.com", "password": "1234"})
+    response = client.post("/users/login", json={"email": "juan.perez@example.com", "password": "Newpassword123."})
     token = response.json()["access_token"]
     
     # Hacer la solicitud de cierre de sesión
