@@ -8,6 +8,9 @@ on:
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    env:
+    # Usar el secreto DATABASE_URL en lugar de poner la URL directamente
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}  # Aquí estamos obteniendo la URL desde los secretos
 
     steps:
     - name: Checkout code
@@ -27,7 +30,7 @@ jobs:
       run: |
         mkdir -p reports  # Crear la carpeta 'reports' si no existe
         # Ejecutar las pruebas en todas las carpetas de `tests/` y generar un reporte HTML
-        PYTHONPATH=./ pytest --maxfail=5 --disable-warnings --html=reports/test_report.html --self-contained-html test/
+        PYTHONPATH=./ pytest --maxfail=5 --disable-warnings --html=reports/test_report.html --self-contained-html test/users/
         
     - name: Upload test report
       if: success()

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import os
 from typing import Optional
+from app.crud import get_reset_token
+import datetime
 
 class AuthService:
     def __init__(self):
@@ -32,4 +34,4 @@ class AuthService:
 
     def get_user(self, db: Session, username: str) -> Optional[User]:
         """Obtiene un usuario de la base de datos utilizando el username"""
-        return crud.get_user_by_username(db, username)
+        return services.get_user_by_username(db, username)
