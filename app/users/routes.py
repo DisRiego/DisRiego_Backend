@@ -53,7 +53,6 @@ def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Token inválido")
 
 @router.put("/change", response_model=dict)
-@router.put("/change", response_model=dict)
 def update_password(
     request: ChangePasswordRequest,
     current_user: dict = Depends(lambda: AuthService().get_user),  
@@ -66,4 +65,29 @@ def update_password(
         return response  
     else:
         return {"error": "No se pudo actualizar la contraseña"}
+    
+@router.post("/request-reset-password", response_model=schemas.ResetPasswordResponse)
+def request_reset_password(
+    reset_password_request: schemas.ResetPasswordRequest, 
+    db: Session = Depends(get_db)
+):
+    user_service = services.UserService(db)
+    user_service.get_user_by_username(reset_password_request.email)  #
+    token = user_service.generate_reset_token(reset_password_request.email)
+    return schemas.ResetPasswordResponse(message="Reset link generated", token=token)
+
+@router.post("/reset-password/{token}", response_model=schemas.ResetPasswordResponse)
+def reset_password(
+    token: str, 
+    update_password_request: schemas.UpdatePasswordRequest, 
+    db: Session = Depends(get_db)
+):
+    user_service = services.UserService(db)
+    user_service.update_password(token, update_password_request.new_password)
+    return schemas.ResetPasswordResponse(message="Password successfully updated", token=token)
+
+    user_service = services.UserService(db)
+    
+    return []  
+
 

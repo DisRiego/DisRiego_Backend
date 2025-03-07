@@ -3,11 +3,14 @@ name: Test Backend
 on:
   push:
     branches:
-      - test  # Ejecutar las pruebas cuando se realice un push en la rama `test`
+      - test  # Ejecutar las pruebas cuando se realice un push en l rama `test`
 
 jobs:
   test-backend:
     runs-on: ubuntu-latest
+    env:
+    # Usar el secreto DATABASE_URL en lugar de poner la URL directamente
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}  # Aquí estamos obteniendo la URL desde los secretos
 
     steps:
     - name: Checkout code
