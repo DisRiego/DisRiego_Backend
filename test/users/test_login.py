@@ -16,7 +16,7 @@ def setup_db():
 
 def test_login_success(setup_db):
     # Proporcionar credenciales correctas de usuario
-    response = client.post("/users/login", json={"email": "juan.perez@example.com", "password": "1234"})
+    response = client.post("/users/login", json={"email": "juan.perez@example.com", "password": "Newpassword123."})
     
     # Verificar que la respuesta sea exitosa
     assert response.status_code == 200
