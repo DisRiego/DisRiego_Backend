@@ -60,7 +60,7 @@ def expired_reset_token(db, test_user):
     """Crear un token expirado para las pruebas"""
     token = str(uuid.uuid4())
     password_reset = PasswordReset(
-        email=test_user.email, token=token, expiration=datetime.utcnow() - timedelta(hours=1)
+        email="juan.perez@example.com", token=token, expiration=datetime.utcnow() - timedelta(hours=1)
     )
     db.add(password_reset)
     db.commit()
