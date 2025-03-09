@@ -3,15 +3,15 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.auth.services import AuthService
-from app.users.schemas import UserLogin, Token, ResetPasswordRequest
+from app.users.schemas import UserLogin, Token
+from app.auth.schemas import ResetPasswordRequest
 from app.users.services import UserService
-from jose import jwt, JWTError
 from datetime import datetime
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-@router.post("/login", response_model=Token)
+@router.post("/login/", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
     Ruta para iniciar sesión de un usuario, generando un token de acceso

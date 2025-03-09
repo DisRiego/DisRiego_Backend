@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from app.users.models import User, RevokedToken
-from app.database import Session
+from sqlalchemy.orm import Session
 from app.users.services import UserService
 from Crypto.Protocol.KDF import scrypt
 
@@ -32,26 +32,26 @@ class AuthService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
 
-    def authenticate_user(self, email: str, password: str) -> User:
-        """
-        Autenticar al usuario comparando la contraseña ingresada con la almacenada
-        :param email: Correo del usuario
-        :param password: Contraseña proporcionada por el usuario
-        :return: Usuario autenticado
-        """
-        try:
-            user_service = UserService(self.db)
-            user = user_service.get_user_by_username(email)
-            if not user:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # def authenticate_user(self, email: str, password: str) -> User:
+    #     """
+    #     Autenticar al usuario comparando la contraseña ingresada con la almacenada
+    #     :param email: Correo del usuario
+    #     :param password: Contraseña proporcionada por el usuario
+    #     :return: Usuario autenticado
+    #     """
+    #     try:
+    #         user_service = UserService(self.db)
+    #         user = user_service.get_user_by_username(email)
+    #         if not user:
+    #             raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-            # Verificar la contraseña usando la función verify_password
-            if not self.verify_password(user.password_salt, user.password, password):
-                raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    #         # Verificar la contraseña usando la función verify_password
+    #         if not self.verify_password(user.password_salt, user.password, password):
+    #             raise HTTPException(status_code=401, detail="Credenciales inválidas")
 
-            return user
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al autenticar al usuario: {str(e)}")
+    #         return user
+    #     except Exception as e:
+    #         raise HTTPException(status_code=500, detail=f"Error al autenticar al usuario: {str(e)}")
 
     def revoke_token(self, db: Session, token: str, expires_at: datetime):
         """
@@ -97,3 +97,52 @@ class AuthService:
             return key.hex()
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al generar el hash de la contraseña: {str(e)}")
+    
+    def get_user_by_username(self, username: str):
+        try:
+            user = self.db.query(User).filter(User.email == username).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            return user
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al obtener el usuario: {str(e)}")
+
+    def hash_password(self, password: str) -> tuple:
+        try:
+            salt = os.urandom(16)
+            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
+            return salt.hex(), key.hex()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al generar el hash de la contraseña: {str(e)}")
+
+    def verify_password(self, stored_salt: str, stored_hash: str, password: str) -> bool:
+        try:
+            bytes.fromhex(stored_salt)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="El salt almacenado no es una cadena hexadecimal válida.")
+        
+        try:
+            salt = bytes.fromhex(stored_salt)
+            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
+            return key.hex() == stored_hash
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al verificar la contraseña: {str(e)}")
+
+    def authenticate_user(self, email: str, password: str):
+        try:
+            user = self.get_user_by_username(email)
+            if not user or not self.verify_password(user.password_salt, user.password, password):
+                raise HTTPException(status_code=401, detail="Credenciales inválidas")
+            return user
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Error al autenticar al usuario: {str(e)}")
+
+    def create_access_token(self, data: dict, expires_delta: timedelta = None):
+        try:
+            to_encode = data.copy()
+            expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+            to_encode.update({"exp": expire})
+            encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+            return encoded_jwt
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
