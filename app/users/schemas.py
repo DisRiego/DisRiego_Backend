@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional , List
 from datetime import datetime
 
 # Modelo base para la solicitud de usuario
@@ -58,3 +58,30 @@ class UpdateUserRequest(BaseModel):
     new_profile_picture: Optional[str] = None
     new_phone: Optional[str] = None
 
+
+
+# Esquema para crear un usuario (sin rol, ya que se asignará automáticamente)
+class UserCreateSchema(BaseModel):
+    email: str
+    password: str
+    name: str
+    first_last_name: Optional[str] = None
+    second_last_name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    # Puedes agregar más campos según lo necesites
+
+# Esquema de respuesta para el usuario
+class UserResponse(UserBase):
+    id: int
+    email: Optional[str] = None
+    name: Optional[str] = None
+    first_last_name: Optional[str] = None
+    second_last_name: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    # Si deseas incluir roles, podrías agregarlos también:
+    roles: List[str] = []
+
+    class Config:
+        orm_mode = True
