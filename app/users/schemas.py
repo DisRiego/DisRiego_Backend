@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
@@ -27,9 +27,25 @@ class UserResponse(UserBase):
     email: Optional[str] = None
 
     class Config:
-        orm_mode = True  # Esto permite que SQLAlchemy funcione con Pydantic
+        from_attributes = True  
 
 # Modelo de token para la autenticación
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+# Modelo para el login de usuario
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UpdateUserRequest(BaseModel):
+    user_id: int
+    new_address: Optional[str] = None
+    new_profile_picture: Optional[str] = None
+    new_phone: Optional[str] = None
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=12, description="Contraseña actual del usuario")
+    new_password: str = Field(..., min_length=12, description="Nueva contraseña con mínimo 12 caracteres, incluyendo mayúsculas, minúsculas y números")
+    confirm_password: str = Field(..., min_length=12, description="Confirmación de la nueva contraseña")

@@ -1,12 +1,12 @@
-from sqlalchemy.orm import Session
-from typing import Optional
-from datetime import datetime
-from app.users.models import User  # Asegúrate de que el modelo User esté correctamente importado
-from app.database import Base
 from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy.orm import Session
+from app.users.models import Gender, Status, TypeDocument, User
+from Crypto.Protocol.KDF import scrypt
+import os
 
 class UserService:
-    """Clase para gestionar la creación y obtención de usuarios"""
+    """Clase para gestionar la creación, autenticación y actualización de usuarios"""
 
     def __init__(self, db: Session):
         self.db = db
@@ -16,67 +16,269 @@ class UserService:
         try:
             user = self.db.query(User).filter(User.email == username).first()
             if not user:
-                raise HTTPException(status_code=404, detail={
-                    "success": False,
-                    "data": "Usuario no encontrado."
-                })
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
             return user
         except Exception as e:
-            raise HTTPException(status_code=500, detail={
-                "success": False,
-                "data": f"Error al obtener el usuario: {str(e)}"
-            })
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
 
-    def create_user(
-        self, 
-        email: str, 
-        password: str, 
-        name: str, 
-        email_status: Optional[bool] = None,
-        type_document_id: Optional[int] = None,
-        document_number: Optional[int] = None,
-        date_issuance_document: Optional[datetime] = None,
-        type_person_id: Optional[int] = None,
-        birthday: Optional[datetime] = None,
-        gender_id: Optional[int] = None,
-        status_id: Optional[int] = None,
-        first_last_name: Optional[str] = None,
-        second_last_name: Optional[str] = None,
-        address: Optional[str] = None,
-        profile_picture: Optional[str] = None,
-        phone: Optional[str] = None
-    ):
+    def create_user(self, email: str, password: str, name: str, **kwargs):
         """Crear un nuevo usuario con todos los campos"""
         try:
+            salt, hashed_password = self.hash_password(password)
             db_user = User(
                 email=email,
-                password=password,
+                password=hashed_password,
+                password_salt=salt,
                 name=name,
-                email_status=email_status,
-                type_document_id=type_document_id,
-                document_number=document_number,
-                date_issuance_document=date_issuance_document,
-                type_person_id=type_person_id,
-                birthday=birthday,
-                gender_id=gender_id,
-                status_id=status_id,
-                first_last_name=first_last_name,
-                second_last_name=second_last_name,
-                address=address,
-                profile_picture=profile_picture,
-                phone=phone
+                **kwargs
             )
-            
             self.db.add(db_user)
             self.db.commit()
             self.db.refresh(db_user)
-            return {
-                "success": True,
-                "data": "Usuario creado correctamente"
-            }
+            return {"success": True, "data": "Usuario creado correctamente"}
         except Exception as e:
             self.db.rollback()
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
+
+    def hash_password(self, password: str) -> tuple:
+        """Generar un hash de la contraseña con salt aleatorio"""
+        try:
+            salt = os.urandom(16)  # Usar un salt aleatorio
+            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)
+            return salt.hex(), key.hex()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
+
+    def verify_password(self, stored_salt: str, stored_hash: str, password: str) -> bool:
+        """Verificar la contraseña ingresada contra el hash almacenado"""
+        try:
+            salt = bytes.fromhex(stored_salt)  # Convertir el salt de vuelta a bytes
+            key = scrypt(password.encode(), salt, key_len=32, N=2**14, r=8, p=1)  # Recalcular el hash
+            return key.hex() == stored_hash  # Comparar el hash calculado con el almacenado
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
+
+    def update_user(self, user_id: int, **kwargs):
+        """Actualizar los detalles de un usuario"""
+        try:
+            db_user = self.db.query(User).filter(User.id == user_id).first()
+            if not db_user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            for key, value in kwargs.items():
+                setattr(db_user, key, value)
+            self.db.commit()
+            self.db.refresh(db_user)
+            return {"success": True, "data": "Usuario actualizado correctamente"}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
+
+    def list_user(self, user_id: int):
+        """obtener los detalles de un usuario"""
+        try:
+            # Filtramos los campos que queremos devolver utilizando `with_entities()`
+            user = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
+                User.id,
+                User.email,
+                User.name,
+                User.first_last_name,
+                User.second_last_name,
+                User.address,
+                User.profile_picture,
+                User.phone,
+                User.date_issuance_document,
+                User.type_document_id,
+                TypeDocument.name.label("type_document_name"),  # Acceso al campo de la relación TypeDocument
+                User.status_id,
+                Status.name.label("status_name"),  # Cambié 'status_user' por 'status'
+                Status.description.label("status_description"),
+                User.gender_id,
+                Gender.name.label("gender_name"),
+            ).filter(User.id == user_id).first()
+            if not user:
+                return {
+                    "success": False,
+                    "data": {
+                        "title" : f"Error al obtener el usuario",
+                        "message" : "Usuario no encontrado.",
+                        }
+                    }
+            # Convertir el resultado a un diccionario antes de devolverlo
+            user_dict = {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "first_last_name": user.first_last_name,
+                "second_last_name": user.second_last_name,
+                "address": user.address,
+                "profile_picture": user.profile_picture,
+                "phone": user.phone,
+                "date_issuance_document" : user.date_issuance_document, # fecha de expedicion
+                "status": user.status_id,
+                "status_name": user.status_name,
+                "status_description": user.status_description,
+                "type_document": user.type_document_id,
+                "type_document_name": user.type_document_name,
+                "gender": user.gender_id,
+                "gender_name": user.gender_name,
+            }
+
+            # consulta los roles del usuario
+            user = self.db.query(User).filter(User.id == user_id).first()
+
+            # Obtener roles del usuario
+            user_roles = [{"id": role.id, "name": role.name} for role in user.roles]
+
+            # Para agregar los roles al diccionario
+            user_dict["roles"] = user_roles
+            
+            return jsonable_encoder({"success": True, "data": [user_dict]})  # Usamos jsonable_encoder
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
+        
+    def list_users(self):
+        """Obtener todos los usuarios con sus detalles"""
+        try:
+            # Filtramos los campos que queremos devolver utilizando `with_entities()`
+            users = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
+                User.id,
+                User.email,
+                User.name,
+                User.first_last_name,
+                User.second_last_name,
+                User.address,
+                User.profile_picture,
+                User.phone,
+                User.date_issuance_document,
+                User.type_document_id,
+                TypeDocument.name.label("type_document_name"),
+                User.status_id,
+                Status.name.label("status_name"),
+                Status.description.label("status_description"),
+                User.gender_id,
+                Gender.name.label("gender_name"),
+            ).all()  #  obtener todos los usuarios
+            
+            if not users:
+                return {
+                    "success": False,
+                    "data": {
+                        "title": "Error al obtener los usuarios",
+                        "message": "No se encontraron usuarios."
+                    }
+                }
+            
+            print([users])
+
+            # Convertir los resultados a diccionarios
+            users_list = []
+            for user in users:
+                user_dict = {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "first_last_name": user.first_last_name,
+                    "second_last_name": user.second_last_name,
+                    "address": user.address,
+                    "profile_picture": user.profile_picture,
+                    "phone": user.phone,
+                    "date_issuance_document": user.date_issuance_document,  # fecha de expedición
+                    "status": user.status_id,
+                    "status_name": user.status_name,
+                    "status_description": user.status_description,
+                    "type_document": user.type_document_id,
+                    "type_document_name": user.type_document_name,
+                    "gender": user.gender_id,
+                    "gender_name": user.gender_name,
+                }
+
+                # Consultamos los roles del usuario, incluso si no tiene roles asignados
+                user_obj = self.db.query(User).filter(User.id == user.id).first()
+
+                # Si no tiene roles asignados, se asigna una lista vacía
+                user_roles = [{"id": role.id, "name": role.name} for role in user_obj.roles] if user_obj.roles else []
+
+                # Agregar los roles al diccionario del usuario
+                user_dict["roles"] = user_roles
+
+                # Añadir el diccionario a la lista de usuarios
+                users_list.append(user_dict)
+
+            return jsonable_encoder({"success": True, "data": users_list})  # Usamos jsonable_encoder para convertir a formato JSON
+
+        except Exception as e:
             raise HTTPException(status_code=500, detail={
                 "success": False,
-                "data": f"Error al crear el usuario: {str(e)}"
+                "data": {
+                    "title": "Error de servidor",
+                    "message": str(e),
+                }
             })
+
+    def change_user_status(self, user_id: int, new_status: int):
+        """Cambiar el estado de un usuario"""
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+            
+            # Verifica si el estado proporcionado existe en la tabla StatusUser
+            status = self.db.query(Status).filter(Status.id == new_status).first()
+            if not status:
+                raise HTTPException(status_code=400, detail="Estado no válido.")
+
+            # Cambiar el estado del usuario
+            user.status_id = new_status
+            self.db.commit()
+            self.db.refresh(user)
+
+            return {"success": True, "data": "Estado de usuario actualizado correctamente."}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del usuario: {str(e)}")
+
+    def get_type_documents(self):
+        """Obtener todos los tipos de documentos"""
+        try:
+            # Consultar todos los tipos de documentos
+            type_documents = self.db.query(TypeDocument).all()
+
+            # Verificar si la consulta devuelve resultados
+            if not type_documents:
+                raise HTTPException(status_code=404, detail="No se encontraron tipos de documentos.")
+
+            # Convertir los resultados a un formato serializable por JSON
+            type_documents_data = jsonable_encoder(type_documents)
+
+            return {
+                "success": True,
+                "data": type_documents_data
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={
+                "success": False,
+                "data": {
+                    "title": "Error de servidor",
+                    "message": str(e)
+                }
+            })
+        
