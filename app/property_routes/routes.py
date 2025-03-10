@@ -48,6 +48,11 @@ def link_property_lot(property_id: int, lot_id: int, db: Session = Depends(get_d
     service = PropertyLotService(db)
     return service.link_property_lot(property_id, lot_id)
 
+@router.post("/inhabilitate/{property_id}", response_model=dict)
+def property_inhabilitate(property_id: int, db: Session = Depends(get_db)):
+    service = PropertyLotService(db)
+    return service.property_inhabilitate(property_id)
+
 @router.get("/")
 def list_properties(db: Session = Depends(get_db)):
     """Obtener todos los predios"""

@@ -96,6 +96,37 @@ class PropertyLotService:
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="Error al asociar el predio con el lote.")
+        
+    def property_inhabilitate(self, property_id: int): 
+        property = self.db.query(Property).filter(Property.id == property_id).first()
+            
+        if not property:
+            #validacion existencia de predio
+            raise HTTPException(status_code=404, detail={"success": False, "message": "El predio no existe"})
+        elif property.State == False:
+            #validacion estado del predio activo o inactivo
+            raise HTTPException(status_code=400, detail={"success": False, "message": "El predio ya se encuentra inhabilitado"})
+        
+        #Validacion de si el predio tiene lotes con estaod activo (True)
+        lot_property = self.db.query(PropertyLot).filter(PropertyLot.property_id == property_id).all()
+        lot_ids = [lot_property.lot_id for lot_property in lot_property]
+        lots = self.db.query(Lot).filter(Lot.id.in_(lot_ids)).all()
+        
+        if any(lot.State == True for lot in lots):
+            raise HTTPException(status_code=400, detail={"success": False, "message": "El predio tiene lotes vinculados activos"})
+        
+        try:
+            #cambio de estado del predio
+            property.State = False
+            self.db.commit()
+
+            #Si todo sale bien, volvemos a retornar un mensaje diciendo que el cambio se realizo con éxito
+            return {"success": True, "message": "El predio se ha inhabilitado correctamente"}
+            
+            
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail="Error al inhabilitar el predio.")
 
     # def get_all_properties(self):
     #     try:

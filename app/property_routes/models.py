@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text, Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -15,6 +15,7 @@ class Property(Base):
     freedom_tradition_certificate = Column(String, nullable=True)
     # description = Column(Text, nullable=True)
     # location = Column(String, nullable=True)
+    State = Column(Boolean, nullable=True)
 
     # Nuevas columnas para almacenar las rutas de los archivos
     # file1_path = Column(String, nullable=True)
@@ -38,6 +39,7 @@ class Lot(Base):
     real_estate_registration_number = Column(String, nullable=False)
     freedom_tradition_certificate = Column(String, nullable=False)
     public_deed = Column(String, nullable=False)
+    State = Column(Boolean, nullable=True)
 
     # Relación con las propiedades (relación muchos a muchos)
     # properties = relationship("Property", secondary="property_lot", back_populates="lots")
