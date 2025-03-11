@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import date
+from typing import Optional, List
+from datetime import date, datetime
 
 # Modelo de predio para recibir datos de entrada
 class PropertyCreate(BaseModel):
@@ -32,3 +32,27 @@ class PropertyResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class NotificationBase(BaseModel):
+    title: str
+    message: str
+    type: str
+
+class NotificationCreate(NotificationBase):
+    user_id: int
+
+class NotificationResponse(NotificationBase):
+    id: int
+    user_id: int
+    read: bool
+    created_at: datetime
+
+    class Config:
+        orm_mode = True
+
+class NotificationList(BaseModel):
+    success: bool
+    data: List[NotificationResponse]
+
+class MarkNotificationAsReadRequest(BaseModel):
+    notification_id: int

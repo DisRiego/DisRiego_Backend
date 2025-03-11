@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from datetime import datetime
 from app.database import Base
 
 class Property(Base):
@@ -56,3 +57,20 @@ class PropertyUser(Base):
 
     property_id = Column(Integer, ForeignKey('property.id'), primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # Puede ser: maintenance, status_change, property_update, etc.
+    read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relación con el usuario
+    user = relationship("User", back_populates="notifications")
+
+    def __repr__(self):
+        return f"<Notification(id={self.id}, user_id={self.user_id}, type={self.type})>"
