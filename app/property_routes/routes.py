@@ -17,6 +17,7 @@ async def create_property(
     location: str = Form(None), 
     freedom_tradition_certificate: UploadFile = File(...),  # Archivos obligatorios
     public_deed: UploadFile = File(...),
+    user_id: int = Form(None),  # Usuario opcional que está creando o al que se asigna el predio
     db: Session = Depends(get_db)  # Dependencia de la base de datos
 ):
     try:
@@ -40,10 +41,7 @@ async def create_property(
                 }
             )
 
-        # Creamos una instancia del servicio para manejar la lógica
         property_service = PropertyLotService(db)
-
-        # Llamamos al método para crear el predio
         result = await property_service.create_property(
             name=name,
             longitude=longitude,
@@ -54,21 +52,24 @@ async def create_property(
             freedom_tradition_certificate=freedom_tradition_certificate,
             description=description,
             location=location,
+            user_id=user_id
         )
-
-        return result  # El resultado es devuelto como un diccionario
-
+        return result
     except HTTPException as e:
-        raise e  # Re-lanzamos la excepción si ya se manejó aquí
-
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
 
 
 @router.post("/lot/create", response_model=dict)
-def create_lot(name: str, area: float, property_id: int, db: Session = Depends(get_db)):
-    service = PropertyLotService(db)
-    return service.create_lot(name, area, property_id)
+async def create_lot(name: str, area: float, property_id: int, user_id: int = None,  db: Session = Depends(get_db)):
+    try:
+        service = PropertyLotService(db)
+        return await service.create_lot(name, area, property_id, user_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear el lote: {str(e)}")
 
 @router.post("/link", response_model=dict)
 def link_property_lot(property_id: int, lot_id: int, db: Session = Depends(get_db)):
@@ -94,8 +95,62 @@ def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
         property_service = PropertyLotService(db)
         lots = property_service.get_lots_property(property_id)
         return lots
-        pass
     except HTTPException as e:
         raise e  # Re-raise HTTPException for known errors
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
+
+# Endpoints para notificaciones
+@router.post("/notifications/", response_model=dict)
+async def create_notification(
+    user_id: int,
+    title: str,
+    message: str,
+    notification_type: str,
+    db: Session = Depends(get_db)
+):
+    """Crear una nueva notificación para un usuario"""
+    try:
+        property_service = PropertyLotService(db)
+        result = await property_service.create_notification(user_id, title, message, notification_type)
+        return result
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear la notificación: {str(e)}")
+
+@router.get("/notifications/{user_id}")
+def get_notifications(user_id: int, db: Session = Depends(get_db)):
+    """Obtener todas las notificaciones de un usuario"""
+    try:
+        property_service = PropertyLotService(db)
+        notifications = property_service.get_user_notifications(user_id)
+        return notifications
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener las notificaciones: {str(e)}")
+
+@router.put("/notifications/{notification_id}/read")
+def mark_notification_as_read(notification_id: int, db: Session = Depends(get_db)):
+    """Marcar una notificación como leída"""
+    try:
+        property_service = PropertyLotService(db)
+        result = property_service.mark_notification_as_read(notification_id)
+        return result
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al marcar la notificación como leída: {str(e)}")
+
+@router.put("/notifications/user/{user_id}/read-all")
+def mark_all_notifications_as_read(user_id: int, db: Session = Depends(get_db)):
+    """Marcar todas las notificaciones de un usuario como leídas"""
+    try:
+        property_service = PropertyLotService(db)
+        result = property_service.mark_all_notifications_as_read(user_id)
+        return result
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al marcar todas las notificaciones como leídas: {str(e)}")

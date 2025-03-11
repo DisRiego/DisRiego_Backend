@@ -70,23 +70,80 @@ class UserService:
                 "message" : str(e),
             }})
 
-    def update_user(self, user_id: int, **kwargs):
-        """Actualizar los detalles de un usuario"""
+    async def update_user(self, user_id: int, **kwargs):
+        """Actualizar los detalles de un usuario y generar una notificación automática"""
         try:
             db_user = self.db.query(User).filter(User.id == user_id).first()
             if not db_user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            
+            # Guardar los campos que se van a actualizar para la notificación
+            updated_fields = []
+            
             for key, value in kwargs.items():
-                setattr(db_user, key, value)
-            self.db.commit()
-            self.db.refresh(db_user)
-            return {"success": True, "data": "Usuario actualizado correctamente"}
+                if value is not None and hasattr(db_user, key):
+                    old_value = getattr(db_user, key)
+                    if old_value != value:  # Solo registrar si el valor cambió
+                        updated_fields.append(key)
+                        setattr(db_user, key, value)
+            
+            # Solo guardar cambios y generar notificación si hubo actualizaciones
+            if updated_fields:
+                self.db.commit()
+                self.db.refresh(db_user)
+                
+                # Generar mensaje para la notificación
+                if len(updated_fields) == 1:
+                    message = f"Se ha actualizado el campo: {self._get_field_display_name(updated_fields[0])}"
+                else:
+                    field_names = [self._get_field_display_name(field) for field in updated_fields]
+                    message = f"Se han actualizado los siguientes campos: {', '.join(field_names)}"
+                
+                # Crear notificación automática
+                await self._create_profile_update_notification(user_id, message)
+                
+                return {"success": True, "data": "Usuario actualizado correctamente", "updated_fields": updated_fields}
+            else:
+                return {"success": True, "data": "No se realizaron cambios en el usuario"}
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title" : f"Contacta con el administrador",
-                "message" : str(e),
+                "title": "Error al actualizar el usuario",
+                "message": str(e),
             }})
+
+    def _get_field_display_name(self, field_name):
+        """Obtener un nombre legible para los campos del usuario"""
+        field_mapping = {
+            "name": "nombre",
+            "first_last_name": "apellido paterno",
+            "second_last_name": "apellido materno",
+            "address": "dirección",
+            "profile_picture": "imagen de perfil",
+            "phone": "número de teléfono",
+            "email": "correo electrónico"
+        }
+        return field_mapping.get(field_name, field_name)
+
+    async def _create_profile_update_notification(self, user_id: int, message: str):
+        """Crear una notificación para actualización de perfil"""
+        try:
+            # Importar el servicio de propiedades para crear la notificación
+            from app.property_routes.services import PropertyLotService
+            
+            # Crear una nueva instancia del servicio con la misma sesión de DB
+            property_service = PropertyLotService(self.db)
+            
+            # Crear la notificación
+            await property_service.create_notification(
+                user_id=user_id,
+                title="Actualización de información personal",
+                message=message,
+                notification_type="profile_update"
+            )
+        except Exception as e:
+            # Solo registrar el error pero no fallar la operación principal
+            print(f"Error al crear notificación de actualización de perfil: {str(e)}")
 
     def list_user(self, user_id: int):
         """obtener los detalles de un usuario"""
@@ -154,7 +211,7 @@ class UserService:
                 "title" : f"Contacta con el administrador",
                 "message" : str(e),
             }})
-        
+
     def list_users(self):
         """Obtener todos los usuarios con sus detalles"""
         try:
@@ -281,4 +338,3 @@ class UserService:
                     "message": str(e)
                 }
             })
-        

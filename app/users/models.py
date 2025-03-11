@@ -39,7 +39,7 @@ class User(Base):
     type_document = relationship("TypeDocument", back_populates="users")
     status_user = relationship("Status", back_populates="users")  # Aquí está la relación corregida
     gender = relationship("Gender", back_populates="users")
-
+    notifications = relationship("Notification", back_populates="user")
     __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
 
 class RevokedToken(Base):
