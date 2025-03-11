@@ -1,8 +1,9 @@
 import os
 import shutil
 from sqlalchemy.orm import Session
-from app.property_routes.models import Property, Lot, PropertyLot
+from app.property_routes.models import Property, Lot, PropertyLot, LotHistory
 from fastapi import HTTPException, UploadFile, File
+from app.users.models import User
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -103,3 +104,92 @@ class PropertyLotService:
     #         return {"success": True, "data": properties}
     #     except Exception as e:
     #         raise HTTPException(status_code=500, detail="Error al obtener los predios.")
+
+# Añadir al archivo app/property_routes/services.py
+
+def disable_lot(self, lot_id: int, user_id: int, details: str = None):
+ 
+    try:
+        # Verificar que el lote existe
+        lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
+        if not lot:
+            raise HTTPException(status_code=404, detail="Lote no encontrado")
+        
+        # Verificar que el lote esté activo
+        if not lot.is_active:
+            raise HTTPException(status_code=400, detail="El lote ya está inhabilitado")
+
+        # Inhabilitar el lote
+        lot.is_active = False
+        
+        # Registrar la acción en el historial
+        history_entry = LotHistory(
+            lot_id=lot_id,
+            user_id=user_id,
+            action="disable",
+            details=details or "Inhabilitación de lote"
+        )
+        
+        self.db.add(history_entry)
+        self.db.commit()
+        
+        return {
+            "success": True, 
+            "data": {
+                "message": "Lote inhabilitado correctamente",
+                "lot_id": lot_id,
+                "timestamp": history_entry.timestamp
+            }
+        }
+        
+    except HTTPException as e:
+        self.db.rollback()
+        raise e
+    except Exception as e:
+        self.db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al inhabilitar el lote: {str(e)}")
+    
+def get_lot_history(self, lot_id: int):
+    """
+    Obtener el historial de cambios de un lote
+    
+    Args:
+        lot_id: ID del lote
+        
+    Returns:
+        Dict con el historial de cambios
+    """
+    try:
+        # Verificar que el lote existe
+        lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
+        if not lot:
+            raise HTTPException(status_code=404, detail="Lote no encontrado")
+        
+        # Obtener el historial
+        history = self.db.query(LotHistory).filter(LotHistory.lot_id == lot_id).order_by(LotHistory.timestamp.desc()).all()
+        
+        # Convertir a formato JSON
+        history_data = []
+        for entry in history:
+            user = self.db.query(User).filter(User.id == entry.user_id).first()
+            history_data.append({
+                "id": entry.id,
+                "action": entry.action,
+                "details": entry.details,
+                "timestamp": entry.timestamp,
+                "user": {
+                    "id": user.id,
+                    "name": user.name if user else "Usuario desconocido",
+                    "email": user.email if user else None
+                }
+            })
+        
+        return {
+            "success": True,
+            "data": history_data
+        }
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el historial del lote: {str(e)}")
