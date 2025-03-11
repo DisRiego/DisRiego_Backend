@@ -50,3 +50,9 @@ class PropertyLot(Base):
 
     property_id = Column(Integer, ForeignKey('property.id'), primary_key=True)
     lot_id = Column(Integer, ForeignKey('lot.id'), primary_key=True)
+
+class PropertyUser(Base):
+    __tablename__ = 'user_property'
+
+    property_id = Column(Integer, ForeignKey('property.id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
