@@ -1,8 +1,10 @@
 import os
-import shutil
-from sqlalchemy.orm import Session
+from fastapi import HTTPException, UploadFile, File, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from app.property_routes.models import Property, Lot, PropertyLot
-from fastapi import HTTPException, UploadFile, File
+from sqlalchemy.orm import Session
+from app.property_routes.schemas import PropertyCreate, PropertyResponse
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -14,27 +16,82 @@ class PropertyLotService:
             # Realizar la consulta para obtener todos los predios
             properties = self.db.query(Property).all()
             if not properties:
-                return {
-                    "success": False,
-                    "data": []
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": jsonable_encoder([])
                     }
-            return properties
+                )
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": jsonable_encoder(properties)
+                }
+            )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al obtener los predios: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Predios",
+                        "message": f"Error al obtener los predios, Contacta al administrador"
+                    }
+                }
+            )
 
     async def create_property(self, name: str, longitude: float, latitude: float, extension: float, 
                         real_estate_registration_number: int, description: str = None, location: str = None,
-                        freedom_tradition_certificate: UploadFile = File(...), public_deed: UploadFile = File(...)):
+                        public_deed: UploadFile = File(...), freedom_tradition_certificate: UploadFile = File(...)):
         """Crear un nuevo predio en la base de datos con la carga de archivos"""
+        # Validación de unicidad de registro de predio
+        existing_property = self.db.query(Property).filter(Property.real_estate_registration_number == real_estate_registration_number).first()
+        if existing_property:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Creacion de predios",
+                        "message": f"El registro de predio ya existe en el sistema"
+                    }
+                }
+            )
+            # raise HTTPException(status_code=400, detail="")
 
-        # Validaciones previas
         if not name or longitude is None or latitude is None or extension is None or not real_estate_registration_number:
-            raise HTTPException(status_code=400, detail="Faltan campos requeridos.")
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Creacion de predios",
+                        "message": f"Faltan campos requeridos."
+                    }
+                }
+            )
+            # raise HTTPException(status_code=400, detail="Faltan campos requeridos.")
+        
+        # Validar que los archivos hayan sido enviados
+        if not public_deed or not freedom_tradition_certificate:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Creacion de predios",
+                        "message": f"Faltan los archivos requeridos para el predio."
+                    }
+                }
+            )
+            # raise HTTPException(status_code=400, detail="Faltan los archivos requeridos para el predio.")
 
         try:
-            # Guardar archivos en el servidor
+            # Guardar los archivos
+            public_deed_path = await self.save_file(public_deed)
             freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate)
-            public_deed_path                   = await self.save_file(public_deed)
 
             # Crear el objeto Property
             property = Property(
@@ -47,17 +104,33 @@ class PropertyLotService:
                 freedom_tradition_certificate=freedom_tradition_certificate_path,
             )
 
-
-            # Agregar el nuevo predio a la base de datos
             self.db.add(property)
             self.db.commit()
             self.db.refresh(property)
 
-            return {"success": True, "data": {"id": property.id, "name": property.name}}
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": {
+                        "title": "Creacion de predios",
+                        "message": f"Se ha creado el predio satisfactoriamente"
+                    }
+                }
+            )
 
         except Exception as e:
             self.db.rollback()  # Revertir cambios si ocurre algún error
-            raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Creacion de predios",
+                        "message": f"Error al crear el predio, Contacta al administrador"
+                    }
+                }
+            )
 
     async def save_file(self, file: UploadFile) -> str:
         """Guardar un archivo en el servidor"""
@@ -77,6 +150,7 @@ class PropertyLotService:
             raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
     def create_lot(self, name: str, area: float, property_id: int):
+        """Crear un nuevo lote asociado a un predio"""
         try:
             lot = Lot(name=name, area=area, property_id=property_id)
             self.db.add(lot)
@@ -88,6 +162,7 @@ class PropertyLotService:
             raise HTTPException(status_code=500, detail="Error al crear el lote.")
 
     def link_property_lot(self, property_id: int, lot_id: int):
+        """Asociar un predio con un lote"""
         try:
             property_lot = PropertyLot(property_id=property_id, lot_id=lot_id)
             self.db.add(property_lot)
@@ -96,10 +171,39 @@ class PropertyLotService:
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="Error al asociar el predio con el lote.")
+        
 
-    # def get_all_properties(self):
-    #     try:
-    #         properties = self.db.query(Property).all()
-    #         return {"success": True, "data": properties}
-    #     except Exception as e:
-    #         raise HTTPException(status_code=500, detail="Error al obtener los predios.")
+    def get_lots_property(self, property_id: int):
+        """Obtener todos los lotes de un predio"""
+        try:
+            # Realizar la consulta para obtener todos los lotes de un predio
+            lots = self.db.query(Lot).join(PropertyLot, PropertyLot.lot_id == Lot.id).filter(PropertyLot.property_id == property_id).all()
+            
+            if not lots:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "data": jsonable_encoder([])
+                    }
+                )
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": jsonable_encoder(lots)
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Error al obtener los lotes del predio",
+                        "message": f"Error al obtener los lotes, Contacta al administrador: {str(e)}"
+                    }
+                }
+            )
