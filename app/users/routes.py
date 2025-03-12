@@ -62,7 +62,7 @@ def list_user(user_id: int, db: Session = Depends(get_db)):
 def list_users(db: Session = Depends(get_db)):
     try:
         user_service = UserService(db)
-        return user_service.list_users()  # Llamar al método para obtener todos los usuarios
+        return user_service.list_users()  
     except HTTPException as e:
         raise e
     except Exception as e:

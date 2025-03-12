@@ -179,28 +179,34 @@ class UserService:
             }})
         
     def list_users(self):
-        """Obtener todos los usuarios con sus detalles"""
+    
         try:
-            # Filtramos los campos que queremos devolver utilizando `with_entities()`
-            users = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
-                User.id,
-                User.email,
-                User.name,
-                User.first_last_name,
-                User.second_last_name,
-                User.address,
-                User.profile_picture,
-                User.phone,
-                User.date_issuance_document,
-                User.type_document_id,
-                TypeDocument.name.label("type_document_name"),
-                User.status_id,
-                Status.name.label("status_name"),
-                Status.description.label("status_description"),
-                User.gender_id,
-                Gender.name.label("gender_name"),
-            ).all()  #  obtener todos los usuarios
             
+            users = (
+                self.db.query(
+                    User.id,
+                    User.email,
+                    User.name,
+                    User.first_last_name,
+                    User.second_last_name,
+                    User.address,
+                    User.profile_picture,
+                    User.phone,
+                    User.date_issuance_document,
+                    User.type_document_id,
+                    TypeDocument.name.label("type_document_name"),
+                    User.status_id,
+                    Status.name.label("status_name"),
+                    Status.description.label("status_description"),
+                    User.gender_id,
+                    Gender.name.label("gender_name"),
+                )
+                .outerjoin(User.type_document)
+                .outerjoin(User.status_user)
+                .outerjoin(User.gender)
+                .all()
+            )
+
             if not users:
                 return {
                     "success": False,
@@ -209,10 +215,7 @@ class UserService:
                         "message": "No se encontraron usuarios."
                     }
                 }
-            
-            print([users])
 
-            # Convertir los resultados a diccionarios
             users_list = []
             for user in users:
                 user_dict = {
@@ -224,7 +227,7 @@ class UserService:
                     "address": user.address,
                     "profile_picture": user.profile_picture,
                     "phone": user.phone,
-                    "date_issuance_document": user.date_issuance_document,  # fecha de expedición
+                    "date_issuance_document": user.date_issuance_document,
                     "status": user.status_id,
                     "status_name": user.status_name,
                     "status_description": user.status_description,
@@ -236,18 +239,12 @@ class UserService:
 
                 # Consultamos los roles del usuario, incluso si no tiene roles asignados
                 user_obj = self.db.query(User).filter(User.id == user.id).first()
-
-                # Si no tiene roles asignados, se asigna una lista vacía
                 user_roles = [{"id": role.id, "name": role.name} for role in user_obj.roles] if user_obj.roles else []
-
-                # Agregar los roles al diccionario del usuario
                 user_dict["roles"] = user_roles
 
-                # Añadir el diccionario a la lista de usuarios
                 users_list.append(user_dict)
 
-            return jsonable_encoder({"success": True, "data": users_list})  # Usamos jsonable_encoder para convertir a formato JSON
-
+            return jsonable_encoder({"success": True, "data": users_list})
         except Exception as e:
             raise HTTPException(status_code=500, detail={
                 "success": False,
@@ -256,6 +253,8 @@ class UserService:
                     "message": str(e),
                 }
             })
+
+
 
     def change_user_status(self, user_id: int, new_status: int):
         """Cambiar el estado de un usuario"""
