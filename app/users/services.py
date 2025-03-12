@@ -111,77 +111,8 @@ class UserService:
                 "message" : str(e),
             }})
 
-    def list_user(self, user_id: int):
-        """obtener los detalles de un usuario"""
-        try:
-            # Filtramos los campos que queremos devolver utilizando `with_entities()`
-            user = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
-                User.id,
-                User.email,
-                User.name,
-                User.first_last_name,
-                User.second_last_name,
-                User.address,
-                User.profile_picture,
-                User.phone,
-                User.date_issuance_document,
-                User.type_document_id,
-                TypeDocument.name.label("type_document_name"),  # Acceso al campo de la relación TypeDocument
-                User.status_id,
-                Status.name.label("status_name"),  # Cambié 'status_user' por 'status'
-                Status.description.label("status_description"),
-                User.gender_id,
-                Gender.name.label("gender_name"),
-            ).filter(User.id == user_id).first()
-            if not user:
-                return {
-                    "success": False,
-                    "data": {
-                        "title" : f"Error al obtener el usuario",
-                        "message" : "Usuario no encontrado.",
-                        }
-                    }
-            # Convertir el resultado a un diccionario antes de devolverlo
-            user_dict = {
-                "id": user.id,
-                "email": user.email,
-                "name": user.name,
-                "first_last_name": user.first_last_name,
-                "second_last_name": user.second_last_name,
-                "address": user.address,
-                "profile_picture": user.profile_picture,
-                "phone": user.phone,
-                "date_issuance_document" : user.date_issuance_document, # fecha de expedicion
-                "status": user.status_id,
-                "status_name": user.status_name,
-                "status_description": user.status_description,
-                "type_document": user.type_document_id,
-                "type_document_name": user.type_document_name,
-                "gender": user.gender_id,
-                "gender_name": user.gender_name,
-            }
-
-            # consulta los roles del usuario
-            user = self.db.query(User).filter(User.id == user_id).first()
-
-            # Obtener roles del usuario
-            user_roles = [{"id": role.id, "name": role.name} for role in user.roles]
-
-            # Para agregar los roles al diccionario
-            user_dict["roles"] = user_roles
-            
-            return jsonable_encoder({"success": True, "data": [user_dict]})  # Usamos jsonable_encoder
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title" : f"Contacta con el administrador",
-                "message" : str(e),
-            }})
-        
     def list_users(self):
-    
         try:
-            
             users = (
                 self.db.query(
                     User.id,
@@ -192,6 +123,7 @@ class UserService:
                     User.address,
                     User.profile_picture,
                     User.phone,
+                    User.document_number,  # Campo corregido
                     User.date_issuance_document,
                     User.type_document_id,
                     TypeDocument.name.label("type_document_name"),
@@ -228,6 +160,7 @@ class UserService:
                     "profile_picture": user.profile_picture,
                     "phone": user.phone,
                     "date_issuance_document": user.date_issuance_document,
+                    "document_number": user.document_number,  # Campo agregado
                     "status": user.status_id,
                     "status_name": user.status_name,
                     "status_description": user.status_description,
@@ -245,6 +178,7 @@ class UserService:
                 users_list.append(user_dict)
 
             return jsonable_encoder({"success": True, "data": users_list})
+            
         except Exception as e:
             raise HTTPException(status_code=500, detail={
                 "success": False,
@@ -253,6 +187,8 @@ class UserService:
                     "message": str(e),
                 }
             })
+
+
 
 
 
