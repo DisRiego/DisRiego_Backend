@@ -5,6 +5,7 @@ from app.users.models import User, RevokedToken
 from sqlalchemy.orm import Session
 from app.users.services import UserService
 from Crypto.Protocol.KDF import scrypt
+import os
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"

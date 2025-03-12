@@ -4,7 +4,7 @@ from app.database import get_db
 from app.users import schemas
 from app.users.models import ChangeUserStatusRequest
 from app.users.services import UserService
-from app.users.schemas import UpdateUserRequest, UserResponse
+from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest , ChangePasswordRequest
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/users", tags=["Users"])
 #         return users
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"Error al obtener los usuarios: {str(e)}")
+
 
 @router.post("/update", response_model=dict)
 def update_user(update: UpdateUserRequest, db: Session = Depends(get_db)):
@@ -87,3 +88,25 @@ def change_user_status(request: ChangeUserStatusRequest, db: Session = Depends(g
         raise e  # Re-raise HTTPException for known errors
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al generar el cambio de estado del usuario: {str(e)}")
+
+
+@router.post("/create-user/")
+def create_user(request: UserCreateRequest , db: Session = Depends(get_db)):
+    try:
+        user_service = UserService(db)
+        return user_service.create_user(request)
+    except Exception as e:
+        raise HTTPException(status_code=500 , detail=f"Error al crear el usuario: {e}")
+    
+@router.post("/{user_id}/change-password", response_model=dict)
+def change_password(user_id: int, request: ChangePasswordRequest, db: Session = Depends(get_db)):
+    """
+    Actualiza la contraseña del usuario verificando la contraseña actual.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.change_user_password(user_id, request)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al cambiar la contraseña: {str(e)}")

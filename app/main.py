@@ -24,8 +24,11 @@ setup_exception_handlers(app)
 app.include_router(roles_router)
 app.include_router(users_router)
 app.include_router(auth_router)
+
 app.include_router(property_lot_router)
-# **Crear tablas si no existen**
+
+
+
 Base.metadata.create_all(bind=engine)
 
 # **Endpoint de Salud**
