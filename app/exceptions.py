@@ -18,10 +18,17 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
 
 # **Manejo de errores globales**
 async def global_exception_handler(request: Request, exc: Exception):
-    logging.error(f"Error: {exc}")
-    return Response(
-        content="Error interno del servidor",
+    # Log detallado del error
+    logging.error(f"Uncaught error occurred: {exc}, URL: {request.url}")
+    
+    # Devuelve una respuesta clara
+    return JSONResponse(
         status_code=500,
+        content={
+            "success": False,
+            "data": "Error interno del servidor. Por favor, contacte al administrador.",
+            "error_details": str(exc)
+        },
         headers={"X-Error-Code": "INTERNAL_SERVER_ERROR"}
     )
 

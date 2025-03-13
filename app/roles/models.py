@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
+from pydantic import BaseModel
 from app.database import Base
 
 # Tabla intermedia para la relación User - Role (Muchos a Muchos)
@@ -20,6 +21,11 @@ role_permission_table = Table(
     extend_existing=True
 )
 
+class ChangeRoleStatusRequest(BaseModel):
+    """Modelo para cambiar el estado de un rol"""
+    rol_id: int
+    new_status: int   # Aquí puedes usar el ID del estado al que se quiere cambiar el rol
+
 class Role(Base):
     """Modelo para los roles"""
     __tablename__ = "rol"
@@ -27,9 +33,12 @@ class Role(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, index=True)
     description = Column(String, index=True)
+    status = Column(Integer, ForeignKey('vars.id'), nullable=False)
 
     permissions = relationship("Permission", secondary=role_permission_table, back_populates="roles")
     users = relationship("User", secondary=user_role_table, back_populates="roles")
+    vars = relationship('Vars', back_populates='role')
+
 
     __table_args__ = {'extend_existing': True}
 
@@ -45,3 +54,15 @@ class Permission(Base):
     roles = relationship("Role", secondary=role_permission_table, back_populates="permissions")
 
     __table_args__ = {'extend_existing': True}
+
+class Vars(Base):
+    __tablename__ = 'vars'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    
+    # Llave foránea a Role
+    # role_id = Column(Integer, ForeignKey('roles.id'))
+    
+    # Define la relación inversa con Role
+    role = relationship('Role', back_populates='vars')

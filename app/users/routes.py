@@ -1,77 +1,112 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.users import schemas, services
-from datetime import datetime
-from jose import jwt, JWTError
+from app.users import schemas
+from app.users.models import ChangeUserStatusRequest
+from app.users.services import UserService
+from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest , ChangePasswordRequest
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 router = APIRouter(prefix="/users", tags=["Users"])
 
+# @router.get("/", response_model=list[UserResponse])
+# def list_users(db: Session = Depends(get_db)):
+#     """
+#     Obtener todos los usuarios.
+#     :param db: Dependencia de la base de datos
+#     :return: Lista de usuarios
+#     """
+#     try:
+#         user_service = UserService(db)
+#         users = user_service.get_users()
+#         return users
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error al obtener los usuarios: {str(e)}")
 
-@router.get("/", response_model=list[schemas.UserResponse])
-def list_users(db: Session = Depends(get_db)):
-
-    role_service = services.User(db)
-    return role_service.get_roles()
-    # return services.get_roles(db)
-    
-
-@router.post("/request-reset-password", response_model=schemas.ResetPasswordResponse)
-def request_reset_password(
-    reset_password_request: schemas.ResetPasswordRequest, 
-    db: Session = Depends(get_db)
-):
-    user_service = services.UserService(db)
-    user_service.get_user_by_username(reset_password_request.email)  #
-    token = user_service.generate_reset_token(reset_password_request.email)
-    return schemas.ResetPasswordResponse(message="Reset link generated", token=token)
-
-@router.post("/reset-password/{token}", response_model=schemas.ResetPasswordResponse)
-def reset_password(
-    token: str, 
-    update_password_request: schemas.UpdatePasswordRequest, 
-    db: Session = Depends(get_db)
-):
-    user_service = services.UserService(db)
-    user_service.update_password(token, update_password_request.new_password)
-    return schemas.ResetPasswordResponse(message="Password successfully updated", token=token)
-
-    user_service = services.UserService(db)
-    
-    return []  
-
-@router.post("/login", response_model=schemas.Token)
-def login(user_credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    user_service = services.UserService(db)
-    user = user_service.authenticate_user(user_credentials.email, user_credentials.password)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
-    access_token = user_service.create_access_token(data={"sub": str(user.email)})
-    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/update", response_model=dict)
-def updater(update: schemas.UpdateUserRequest, db: Session = Depends(get_db)):
-    update_user_service = services.UserService(db)
-    return update_user_service.update_user(
-        user_id=update.user_id,
-        new_address=update.new_address,
-        new_profile_picture=update.new_profile_picture,
-        new_phone=update.new_phone
-    )
-
-
-@router.post("/logout")
-def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    auth_service = services.AuthService()
+def update_user(update: UpdateUserRequest, db: Session = Depends(get_db)):
+    """
+    Actualizar los detalles de un usuario.
+    :param update: Datos del usuario a actualizar
+    :param db: Dependencia de la base de datos
+    :return: Mensaje de éxito o error
+    """
     try:
-        
-        payload = jwt.decode(token, auth_service.secret_key, algorithms=["HS256"])
-        expires_at = datetime.utcfromtimestamp(payload.get("exp"))
-        
-        auth_service.revoke_token(db, token, expires_at)
-        return {"message": "Cierre de sesión exitoso"}
-    except JWTError:
-        raise HTTPException(status_code=400, detail="Token inválido")
+        user_service = UserService(db)
+        result = user_service.update_user(
+            update.user_id,
+            update.new_address,
+            update.new_profile_picture,
+            update.new_phone
+        )
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        return {"success": True, "message": "Usuario actualizado correctamente"}
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
+@router.get("/{user_id}")
+def list_user(user_id: int, db: Session = Depends(get_db)):
+    """obtener informacion de un usuario"""
+    try:
+        user_service = UserService(db)
+        return user_service.list_user(user_id)
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar el usuario: {str(e)}")
+    
+@router.get("/")
+def list_users(db: Session = Depends(get_db)):
+    try:
+        user_service = UserService(db)
+        return user_service.list_users()  
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar los usuarios: {str(e)}")
+    
+@router.get("/type-document/", tags=['type-document'])
+def list_types_document(db: Session = Depends(get_db)):
+    try:
+        user_service = UserService(db)
+        return user_service.get_type_documents()
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar los tipos de documentos: {str(e)}")
+    
+@router.post("/change-user-status/")
+def change_user_status(request: ChangeUserStatusRequest, db: Session = Depends(get_db)):
+    """Cambiar el estado de un usuario"""
+    try:
+        user_service = UserService(db)
+        return user_service.change_user_status(request.user_id, request.new_status)
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar el cambio de estado del usuario: {str(e)}")
+
+
+@router.post("/create-user/")
+def create_user(request: UserCreateRequest , db: Session = Depends(get_db)):
+    try:
+        user_service = UserService(db)
+        return user_service.create_user(request)
+    except Exception as e:
+        raise HTTPException(status_code=500 , detail=f"Error al crear el usuario: {e}")
+    
+@router.post("/{user_id}/change-password", response_model=dict)
+def change_password(user_id: int, request: ChangePasswordRequest, db: Session = Depends(get_db)):
+    """
+    Actualiza la contraseña del usuario verificando la contraseña actual.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.change_user_password(user_id, request)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al cambiar la contraseña: {str(e)}")
