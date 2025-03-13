@@ -11,7 +11,7 @@ def db():
     db = SessionLocal()
     
     # ❗Eliminar cualquier rol con el mismo nombre antes de ejecutar la prueba
-    db.query(Role).delete()
+    db.query(Role).filter(Role.name == "Test Role").delete()
     db.commit()
     
     yield db  # Proporciona la sesión a la prueba
