@@ -1,5 +1,7 @@
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy import text
 from fastapi import HTTPException
 from app.roles import models, schemas
 from app.users.models import User
@@ -74,7 +76,7 @@ class RoleService:
                     "data": f"Los siguientes permisos no existen: {list(missing_permissions)}"
                 })
 
-            db_role = models.Role(name=role_data.name, description=role_data.description)
+            db_role = models.Role(name=role_data.name, description=role_data.description, status= 1)
             db_role.permissions = permissions
             self.db.add(db_role)
             self.db.commit()
@@ -92,13 +94,87 @@ class RoleService:
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:
-            roles = self.db.query(models.Role).all()
+            # Realizamos la consulta SQL para obtener los roles y el estado asociado
+            query = """
+                SELECT
+                    r.id AS role_id,
+                    r.name AS role_name,
+                    r.description AS role_description,
+                    v.name AS status_name,
+                    r.status,
+                    count(ur.id) AS quantity_users,
+                    string_agg(
+                        CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
+                    ) AS permissions
+                FROM
+                    rol r
+                    LEFT JOIN user_rol ur ON ur.rol_id = r.id
+                    LEFT JOIN vars v ON r.status = v.id
+                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id  -- Relación con la tabla de permisos
+                    LEFT JOIN permission p ON p.id = rp.permission_id  -- Relación con la tabla de permisos
+                GROUP BY
+                    r.id,
+                    r.name,
+                    r.description,
+                    v.name,
+                    r.status
+            """
+            # Ejecutamos la consulta SQL y obtenemos el resultado como una lista de diccionarios
+            roles = self.db.execute(text(query)).fetchall()
+            
+            # Procesar el resultado
+            roles_data = []
             for role in roles:
-                if not hasattr(role, "permissions") or role.permissions is None:
-                    role.permissions = []
-            return roles
-        except SQLAlchemyError:
-            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles."})
+                # Procesar la cadena de permisos
+                permissions = []
+                if role.permissions:
+                    # Split by comma and extract ID, Name and Description for each permission
+                    for permission_str in role.permissions.split(','):
+                        perm_id, perm_name, perm_description = permission_str.split(':::::')
+                        if perm_id == '':
+                           continue
+                        else: 
+                            permissions.append({
+                                "id": int(perm_id),
+                                "name": perm_name,
+                                "description": perm_description
+                            })
+
+                # Construir el diccionario con los detalles del rol
+                role_data = {
+                    "role_id": role.role_id,
+                    "role_name": role.role_name,
+                    "role_description": role.role_description,
+                    "status_name": role.status_name,
+                    "status": role.status,
+                    "quantity_users": role.quantity_users,
+                    "permissions": permissions  # Lista de permisos con id, name y description
+                }
+                roles_data.append(role_data)
+            
+            return {"success": True, "data": roles_data}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles."+str(e)})
+        
+    def get_rol(self, role_id):
+        """Obtener todos los roles con manejo de errores"""
+        try:
+            role = self.db.query(models.Role).filter(models.Role.id == role_id).first()
+
+            # Verifica si el rol fue encontrado
+            if not role:
+                raise HTTPException(status_code=404, detail="El rol no fue encontrado")
+
+            # Asegúrate de que el rol tenga una lista vacía de permisos si no tiene permisos asignados
+            if not hasattr(role, "permissions") or role.permissions is None:
+                role.permissions = []
+
+            return jsonable_encoder({"success": True, "data": [role]})
+        except Exception as e:
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title" : f"Contacta con el administrador",
+                "message" : str(e),
+            }})
 
     def update_role_permissions(self, role_id: int, permission_ids: list[int]):
         """Actualizar permisos de un rol"""
@@ -253,3 +329,25 @@ class UserRoleService:
           }
       except SQLAlchemyError:
           raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener la información del usuario."})
+
+    def change_role_status(self, role_id: int, new_status: int):
+        """Cambiar el estado de un rol"""
+        try:
+            role = self.db.query(models.Role).filter(models.Role.id == role_id).first()
+            if not role:
+                raise HTTPException(status_code=404, detail="Rol no encontrado.")
+            
+            # Verifica si el estado proporcionado existe en la tabla StatusUser
+            status = self.db.query(models.Vars).filter(models.Vars.id == new_status).first()
+            if not status:
+                raise HTTPException(status_code=400, detail="Estado no válido.")
+
+            # Cambiar el estado del rol
+            role.status = new_status
+            self.db.commit()
+            self.db.refresh(role)
+
+            return {"success": True, "data": "Estado de rol actualizado correctamente."}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del rol: {str(e)}")

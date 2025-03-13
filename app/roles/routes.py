@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.roles import schemas, services
+from app.roles.models import ChangeRoleStatusRequest
 
 router = APIRouter(prefix="/roles", tags=["Roles"])
 
@@ -11,11 +12,15 @@ def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db)):
     return role_service.create_role(role)
     # return services.create_role(db, role)
 
-@router.get("/", response_model=list[schemas.RoleResponse])
+@router.get("/")
 def list_roles(db: Session = Depends(get_db)):
     role_service = services.RoleService(db)
     return role_service.get_roles()
-    # return services.get_roles(db)
+
+@router.get("/{role_id}")
+def list_roles(role_id : int, db: Session = Depends(get_db)):
+    role_service = services.RoleService(db)
+    return role_service.get_rol(role_id)
 
 @router.post("/permissions/", response_model=schemas.SimpleResponse)
 def create_permission(permission: schemas.PermissionBase, db: Session = Depends(get_db)):
@@ -66,4 +71,15 @@ def revoke_role(user_id: int, role_id: int, db: Session = Depends(get_db)):
     """Revocar un rol de un usuario, asegurando que tenga al menos 1 rol"""
     user_role_service = services.UserRoleService(db)
     return user_role_service.revoke_role_from_user(user_id, role_id)
+
+@router.post("/change-rol-status/")
+def change_role_status(request: ChangeRoleStatusRequest, db: Session = Depends(get_db)):
+    """Cambiar el estado de un rol"""
+    try:
+        user_service = services.UserRoleService(db)
+        return user_service.change_role_status(request.rol_id, request.new_status)
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al generar el cambio de estado del rol: {str(e)}")
 

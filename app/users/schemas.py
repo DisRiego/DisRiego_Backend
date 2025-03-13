@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field , model_validator , validator
+import re
+from typing import Optional , List
 from datetime import datetime
 
 # Modelo base para la solicitud de usuario
@@ -27,25 +28,12 @@ class UserResponse(UserBase):
     email: Optional[str] = None
 
     class Config:
-        orm_mode = True  
+        from_attributes = True  
 
 # Modelo de token para la autenticación
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-
-# Esquema para el restablecimiento de contraseña
-class ResetPasswordRequest(BaseModel):
-    email: str  # El email es lo único necesario para solicitar el restablecimiento
-
-class ResetPasswordResponse(BaseModel):
-    message: str
-    token: str
-
-class UpdatePasswordRequest(BaseModel):
-    token: str
-    new_password: str
 
 # Modelo para el login de usuario
 class UserLogin(BaseModel):
@@ -58,3 +46,39 @@ class UpdateUserRequest(BaseModel):
     new_profile_picture: Optional[str] = None
     new_phone: Optional[str] = None
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=12, description="Contraseña actual del usuario")
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        description="Nueva contraseña con mínimo 12 caracteres, incluyendo mayúsculas, minúsculas y números"
+    )
+    confirm_password: str = Field(..., min_length=12, description="Confirmación de la nueva contraseña")
+
+    @validator('new_password')
+    def validate_new_password(cls, value):
+        if len(value) < 12:
+            raise ValueError("La contraseña debe tener al menos 12 caracteres")
+        if not re.search(r'[0-9]', value):
+            raise ValueError("La contraseña debe incluir al menos un número")
+        if not re.search(r'[A-Z]', value):
+            raise ValueError("La contraseña debe incluir al menos una letra mayúscula")
+        if not re.search(r'[a-z]', value):
+            raise ValueError("La contraseña debe incluir al menos una letra minúscula")
+        return value
+
+    @model_validator(mode="after")
+    def check_passwords_match(cls, values):
+        if values.new_password != values.confirm_password:
+            raise ValueError("La nueva contraseña y la confirmación no coinciden")
+        return values
+
+class UserCreateRequest(BaseModel):
+    first_name: str
+    first_last_name: str
+    second_last_name: Optional[str] = None
+    document_type: int
+    document_number: int
+    date_issuance_document: datetime
+    role_id: Optional[List[int]] = None
+ 
