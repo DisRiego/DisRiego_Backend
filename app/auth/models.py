@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, Integer, String, DateTime
 from datetime import datetime
 from app.database import Base
@@ -13,3 +14,4 @@ class RevokedToken(Base):
     def has_expired(self):
         """Método para verificar si el token ha expirado"""
         return datetime.utcnow() > self.expires_at
+

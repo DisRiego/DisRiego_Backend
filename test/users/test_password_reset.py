@@ -1,21 +1,19 @@
 import pytest
-from fastapi.testclient import TestClient
-from app.main import app
-from app.database import SessionLocal
+import re
+from datetime import datetime, timedelta, timezone
+from sqlalchemy.orm import Session
 from app.users.models import User, PasswordReset
-from app.users import schemas
-import uuid
-from datetime import datetime, timedelta
-from passlib.context import CryptContext
+from app.users.services import UserService
+from app.database import SessionLocal
+from fastapi.exceptions import HTTPException
 
-
-# Configuración para el hashing de contraseñas (usamos scrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @pytest.fixture(scope="module")
 def db():
+
     """Fixture para crear una nueva sesión de base de datos para las pruebas"""
+
     db = SessionLocal()
     db.begin()
     yield db
@@ -24,98 +22,97 @@ def db():
 
 
 @pytest.fixture()
-def test_user(db):
-    """Fixture para crear un usuario de prueba"""
-    existing_user = db.query(User).filter(User.email == "test@example.com").first()
-    if existing_user:
-        return existing_user
-    
-    # Crear un usuario de prueba si no existe
-    user = User(
-        email="test@example.com",
-        name="Test User",
-    )
-    user.hashed_password = "testpassword"  # Generar el hash de la contraseña
+def user_service(db):
+    """Crear una instancia del servicio para pruebas"""
+    return UserService(db)
+
+
+def cleanup_user(db, email):
+    """Eliminar usuario si ya existe para evitar errores de clave única"""
+    db.query(User).filter(User.email == email).delete()
+    db.query(PasswordReset).filter(PasswordReset.email == email).delete()
+    db.commit()
+
+
+def test_generate_reset_token(user_service, db):
+    """✅ Prueba para la generación del token de restablecimiento de contraseña"""
+    email = "test@example.com"
+
+    # Limpiar usuario antes de crearlo
+    cleanup_user(db, email)
+
+    user = User(email=email, password="hashedpassword", password_salt="somesalt")
     db.add(user)
     db.commit()
+
+    token = user_service.generate_reset_token(email)
+
+    stored_token = db.query(PasswordReset).filter(PasswordReset.email == email).first()
+    assert stored_token is not None
+    assert stored_token.token == token
+
+    # Generar otro token para verificar que el anterior se elimina
+    new_token = user_service.generate_reset_token(email)
+    stored_token = db.query(PasswordReset).filter(PasswordReset.email == email).first()
+    assert stored_token.token == new_token
+    assert stored_token.token != token
+
+
+def test_update_password_success(user_service, db):
+    """✅ Prueba para actualizar la contraseña con un token válido"""
+
+    email = "test@example.com"
+    cleanup_user(db, email)
+
+    user = User(email=email, password="hashedpassword", password_salt="somesalt")
+    db.add(user)
+    db.commit()
+
+    token = user_service.generate_reset_token(email)
+    new_password = "NewSecurePass123"
+
+    assert len(new_password) >= 12
+    assert re.search(r'[0-9]', new_password)
+    assert re.search(r'[A-Z]', new_password)
+    assert re.search(r'[a-z]', new_password)
+    assert re.match(r'^[a-zA-Z0-9]+$', new_password)
+
+    response = user_service.update_password(token, new_password)
+    assert response["message"] == "Contraseña actualizada correctamente"
+
     db.refresh(user)
-    return user
+    assert user_service.verify_password(user.password_salt, user.password, new_password)
 
 
-@pytest.fixture()
-def generate_reset_token(db, test_user):
-    """Generar un token de restablecimiento de contraseña para las pruebas"""
-    token = str(uuid.uuid4())
-    password_reset = PasswordReset(
-        email=test_user.email, token=token, expiration=datetime.utcnow() + timedelta(hours=1)
-    )
-    db.add(password_reset)
+def test_update_password_invalid_token(user_service, db):
+    """❌ Prueba para intentar cambiar contraseña con un token inválido"""
+    with pytest.raises(HTTPException) as exc_info:
+        user_service.update_password("invalid_token", "NewPassword123")
+
+    assert exc_info.value.status_code == 404
+    assert "Token inválido o expirado" in str(exc_info.value)
+
+
+def test_update_password_expired_token(user_service, db):
+    """❌ Prueba para intentar cambiar la contraseña con un token expirado"""
+
+    email = "expired@example.com"
+    cleanup_user(db, email)
+
+    user = User(email=email, password="oldpassword", password_salt="oldsalt")
+    db.add(user)
     db.commit()
-    db.refresh(password_reset)
-    return token, password_reset
 
-
-@pytest.fixture()
-def expired_reset_token(db, test_user):
-    """Crear un token expirado para las pruebas"""
-    token = str(uuid.uuid4())
-    password_reset = PasswordReset(
-        email="juan.perez@example.com", token=token, expiration=datetime.utcnow() - timedelta(hours=1)
+    expired_token = PasswordReset(
+        email=email,
+        token="expired_token",
+        expiration=datetime.now(timezone.utc) - timedelta(hours=1)  # Corregido el uso de datetime
     )
-    db.add(password_reset)
+    db.add(expired_token)
     db.commit()
-    db.refresh(password_reset)
-    return token, password_reset
 
+    with pytest.raises(HTTPException) as exc_info:
+        user_service.update_password("expired_token", "NewPassword123")
 
-@pytest.fixture()
-def client():
-    """Crear una instancia del cliente de pruebas"""
-    return TestClient(app)
-
-
-# Test: Solicitar restablecimiento de contraseña
-def test_request_reset_password(client: TestClient, db, test_user):
-    response = client.post(
-        "/users/request-reset-password",
-        json={"email": test_user.email}
-    )
-    assert response.status_code == 200
-    assert response.json() == {"message": "Reset link generated", "token": response.json()["token"]}
-
-
-# Test: Restablecer contraseña con un token válido
-def test_reset_password(client: TestClient, db, test_user, generate_reset_token):
-    token, _ = generate_reset_token
-    new_password = "Newpassword123."
-    
-    response = client.post(
-        f"/users/reset-password/{token}",
-        json={"token": token, "new_password": new_password}
-    )
-    
-    assert response.status_code == 200
-    assert response.json() == {"message": "Password successfully updated", "token": token}
-    
-
-
-# Test: Intentar restablecer la contraseña con un token inválido
-def test_reset_password_invalid_token(client: TestClient, db, test_user):
-    invalid_token = str(uuid.uuid4())  # Un token que no existe
-    response = client.post(
-        f"/users/reset-password/{invalid_token}",
-        json={"token": invalid_token, "new_password": "Newpassword123."}
-    )
-    assert response.status_code == 404
-    assert response.json() == {"detail": "Invalid or expired token"}
-
-
-# Test: Intentar restablecer la contraseña con un token expirado
-def test_reset_password_expired_token(client: TestClient, db, expired_reset_token):
-    token, _ = expired_reset_token
-    response = client.post(
-        f"/users/reset-password/{token}",
-        json={"token": token, "new_password": "Newpassword123."}
-    )
-    assert response.status_code == 400
-    assert response.json() == {"detail": "Token expired"}
+    assert exc_info.value.status_code == 400
+    assert "El token ha expirado" in str(exc_info.value)

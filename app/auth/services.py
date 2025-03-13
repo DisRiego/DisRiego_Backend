@@ -1,3 +1,4 @@
+
 from fastapi import HTTPException
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
@@ -152,3 +153,4 @@ class AuthService:
             return encoded_jwt
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
+

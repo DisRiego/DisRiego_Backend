@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -140,3 +141,4 @@ async def update_lot(property_id: int,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
     )
+

@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session , joinedload
@@ -94,3 +95,4 @@ def update_password(token: str, update_request: UpdatePasswordRequest, db: Sessi
     user_service = UserService(db)
     user_service.update_password(token, update_request.new_password)
     return ResetPasswordResponse(message="Contraseña actualizada correctamente", token=token)
+

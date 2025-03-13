@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime, timedelta
 from fastapi import HTTPException ,Depends, status
@@ -392,3 +393,4 @@ class UserService:
                 status_code=500,
                 detail=f"Error al obtener la información del usuario: {str(e)}"
             )
+

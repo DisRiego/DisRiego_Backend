@@ -1,3 +1,4 @@
+
 import os
 import uuid
 from fastapi import HTTPException, UploadFile, File, Response
@@ -521,4 +522,5 @@ class PropertyLotService:
                         "message": f"Error al editar el predio, Contacta al administrador: {str(e)}"
                     }
                 }
+
             )

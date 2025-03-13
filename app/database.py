@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 # Cargar variables de entorno
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://adminintegrador:Z5CKewnHWLOwW9Nlo7BulaNsZBatSKaS@dpg-cuvnue5ds78s73f7ta3g-a.oregon-postgres.render.com/dis_riego_db")
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
 
 # Configurar la base de datos
 engine = create_engine(DATABASE_URL)
