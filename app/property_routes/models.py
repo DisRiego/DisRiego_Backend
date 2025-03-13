@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -51,4 +52,5 @@ class PropertyUser(Base):
     __tablename__ = 'user_property'
 
     property_id = Column(Integer, ForeignKey('property.id'), primary_key=True)
+
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)

@@ -1,3 +1,4 @@
+
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date
@@ -32,3 +33,4 @@ class PropertyResponse(BaseModel):
 
     class Config:
         orm_mode = True
+

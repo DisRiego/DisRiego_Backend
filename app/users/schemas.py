@@ -81,4 +81,13 @@ class UserCreateRequest(BaseModel):
     document_number: int
     date_issuance_document: datetime
     role_id: Optional[List[int]] = None
- 
+
+class UserUpdateInfo(BaseModel):
+    name: str
+    first_last_name: str
+    second_last_name: str
+    type_document_id: int
+    document_number: int
+    date_issuance_document: datetime
+    email: str
+

@@ -8,9 +8,12 @@ from app.database import SessionLocal
 from fastapi.exceptions import HTTPException
 
 
+
 @pytest.fixture(scope="module")
 def db():
-    """Fixture para manejar una sesión de base de datos en pruebas"""
+
+    """Fixture para crear una nueva sesión de base de datos para las pruebas"""
+
     db = SessionLocal()
     db.begin()
     yield db
