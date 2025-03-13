@@ -1,13 +1,11 @@
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from app import crud  # Importa las funciones de crud
-from app.models import User
+from app.users import services  # Importa las funciones necesarias
+from app.users.models import User
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import os
-from typing import Optional
-from app.crud import get_reset_token
-import datetime
+from typing import Optional, Dict
 
 class AuthService:
     def __init__(self):
@@ -32,6 +30,15 @@ class AuthService:
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt
 
-    def get_user(self, db: Session, username: str) -> Optional[User]:
-        """Obtiene un usuario de la base de datos utilizando el username"""
-        return services.get_user_by_username(db, username)
+    def get_user(self, db: Session, username: str) -> Optional[Dict]:
+        """Obtiene un usuario de la base de datos y lo convierte en un diccionario JSON"""
+        user = services.get_user_by_username(db, username)
+        if user:
+            return {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "first_last_name": user.first_last_name,
+                "second_last_name": user.second_last_name
+            }
+        return None
