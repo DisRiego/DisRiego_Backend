@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session , joinedload
 from datetime import datetime
 from jose import jwt, JWTError
 from app.database import get_db
@@ -8,6 +8,8 @@ from app.auth.services import AuthService, SECRET_KEY
 from app.auth.schemas import ResetPasswordRequest, ResetPasswordResponse, UpdatePasswordRequest
 from app.users.schemas import UserLogin, Token
 from app.users.services import UserService
+from app.roles.models import Role, Permission 
+from app.users.models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -15,15 +17,46 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 @router.post("/login/", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
-    Inicia sesión y genera un token de acceso.
+    Inicia sesión y genera un token de acceso con la siguiente información:
+    - id, name, email, status_date
+    - rol: una lista de roles, cada uno con sus permisos (si existen, de lo contrario una lista vacía)
     """
     auth_service = AuthService(db)
+    
+    
     user = auth_service.authenticate_user(user_credentials.email, user_credentials.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
     
-    access_token = auth_service.create_access_token(data={"sub": str(user.email)})
+    
+    user = (
+        db.query(User)
+        .options(joinedload(User.roles).joinedload(Role.permissions))
+        .filter(User.email == user.email)
+        .first()
+    )
+    
+   
+    roles = []
+    for role in user.roles:
+        role_data = {"id": role.id, "name": role.name}
+        permisos = [{"id": perm.id, "name": perm.name} for perm in role.permissions]
+        role_data["permisos"] = permisos  # Si no hay permisos, será una lista vacía
+        roles.append(role_data)
+    
+   
+    token_data = {
+        "sub": user.email,   
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "status_date": str(datetime.utcnow()),
+        "rol": roles
+    }
+    
+    access_token = auth_service.create_access_token(data=token_data)
     return {"access_token": access_token, "token_type": "bearer"}
+
 
 @router.post("/logout")
 def logout(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
