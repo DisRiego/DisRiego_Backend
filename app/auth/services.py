@@ -3,7 +3,6 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from app.users.models import User, RevokedToken
 from sqlalchemy.orm import Session , joinedload
-from app.users.services import UserService
 from app.roles.models import Role, Permission
 from Crypto.Protocol.KDF import scrypt
 import os

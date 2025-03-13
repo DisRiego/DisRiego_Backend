@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
-from fastapi import HTTPException
+from fastapi import HTTPException ,Depends, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from app.users.models import Gender, Status, TypeDocument, User, PasswordReset
@@ -9,6 +9,9 @@ from app.users.schemas import UserCreateRequest , ChangePasswordRequest
 from app.roles.models import Role 
 import os
 from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
+from app.auth.services import SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -318,4 +321,20 @@ class UserService:
                 "message": str(e)
             }})
 
-    
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+    def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+        """
+        Extrae y decodifica la información del token.
+        Se espera que el token contenga en su payload los datos del usuario,
+        incluyendo los permisos (como lista de diccionarios en la clave "permisos").
+        """
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            return payload  # El payload es un dict con la información del usuario
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
