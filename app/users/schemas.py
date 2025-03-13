@@ -90,3 +90,4 @@ class UserUpdateInfo(BaseModel):
     type_document_id: int
     document_number: int
     date_issuance_document: datetime
+    email: str

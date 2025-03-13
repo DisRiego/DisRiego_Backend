@@ -151,6 +151,7 @@ def edit_user(
         second_last_name=update_data.second_last_name,
         type_document_id=update_data.type_document_id,
         document_number=update_data.document_number,
-        date_issuance_document=update_data.date_issuance_document
+        date_issuance_document=update_data.date_issuance_document,
+        email = update_data.email
     )
     return result
