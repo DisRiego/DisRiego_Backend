@@ -1,14 +1,17 @@
 import uuid
 from datetime import datetime, timedelta
-from fastapi import HTTPException
+from fastapi import HTTPException ,Depends, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session , joinedload
 from app.users.models import Gender, Status, TypeDocument, User, PasswordReset
 from Crypto.Protocol.KDF import scrypt
 from app.users.schemas import UserCreateRequest , ChangePasswordRequest
 from app.roles.models import Role 
 import os
 from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
+from app.auth.services import SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -317,3 +320,75 @@ class UserService:
                 "title": "Error al actualizar la contraseña",
                 "message": str(e)
             }})
+
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+    def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+        """
+        Extrae y decodifica la información del token.
+        Se espera que el token contenga en su payload los datos del usuario,
+        incluyendo los permisos (como lista de diccionarios en la clave "permisos").
+        """
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            return payload  # El payload es un dict con la información del usuario
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    def list_user(self, user_id: int):
+        """
+        Obtiene la información completa de un usuario, incluyendo relaciones:
+        type_document, status_user, gender y roles.
+        """
+        try:
+            user = (
+                self.db.query(User)
+                .options(
+                    joinedload(User.type_document),
+                    joinedload(User.status_user),
+                    joinedload(User.gender),
+                    joinedload(User.roles)
+                )
+                .filter(User.id == user_id)
+                .first()
+            )
+            if not user:
+                return {
+                    "success": False,
+                    "data": {
+                        "title": "Error al obtener el usuario",
+                        "message": "Usuario no encontrado."
+                    }
+                }
+            
+            user_dict = {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "first_last_name": user.first_last_name,
+                "second_last_name": user.second_last_name,
+                "address": user.address,
+                "profile_picture": user.profile_picture,
+                "phone": user.phone,
+                "document_number": user.document_number,
+                "date_issuance_document": user.date_issuance_document,
+                "type_document_id": user.type_document_id,
+                "status_id": user.status_id,
+                "gender_id": user.gender_id,
+                # Si las relaciones están cargadas, se obtienen sus nombres
+                "type_document_name": user.type_document.name if user.type_document else None,
+                "status_name": user.status_user.name if user.status_user else None,
+                "status_description": user.status_user.description if user.status_user else None,
+                "gender_name": user.gender.name if user.gender else None,
+                "roles": [{"id": role.id, "name": role.name} for role in user.roles],
+            }
+            
+            return jsonable_encoder({"success": True, "data": [user_dict]})
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al obtener la información del usuario: {str(e)}"
+            )

@@ -296,19 +296,7 @@ class PropertyLotService:
                         "message": f"Error al crear el lote, Contacta al administrador"
                     }
                 }
-            )
-
-    def link_property_lot(self, property_id: int, lot_id: int):
-        """Asociar un predio con un lote"""
-        try:
-            property_lot = PropertyLot(property_id=property_id, lot_id=lot_id)
-            self.db.add(property_lot)
-            self.db.commit()
-            return {"success": True, "data": "Predio y lote asociados correctamente."}
-        except Exception as e:
-            self.db.rollback()
-            raise HTTPException(status_code=500, detail="Error al asociar el predio con el lote.")
-        
+            )        
 
     def get_lots_property(self, property_id: int):
         """Obtener todos los lotes de un predio"""
@@ -341,6 +329,196 @@ class PropertyLotService:
                     "data": {
                         "title": "Error al obtener los lotes del predio",
                         "message": f"Error al obtener los lotes, Contacta al administrador: {str(e)}"
+                    }
+                }
+            )
+
+    async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
+                   real_estate_registration_number: int, public_deed: UploadFile = File(None), 
+                    freedom_tradition_certificate: UploadFile = File(None)):
+        """Editar un lote existente en la base de datos con la posibilidad de actualizar archivos"""
+
+        try:
+            # Verificar si el lote existe
+            lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
+            if not lot:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de lote",
+                            "message": "El lote no existe en el sistema"
+                        }
+                    }
+                )
+            
+            # Verificar si el número de registro de propiedad es único, pero no en el lote actual
+            existing_lot = self.db.query(Lot) \
+                .filter(Lot.real_estate_registration_number == str(real_estate_registration_number)) \
+                .filter(Lot.id != lot_id) \
+                .first()
+
+            if existing_lot:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de lote",
+                            "message": "El número de registro del lote ya existe en otro lote"
+                        }
+                    }
+                )
+
+            # Actualizar la información del lote
+            lot.name = name
+            lot.longitude = longitude
+            lot.latitude = latitude
+            lot.extension = extension
+            lot.real_estate_registration_number = real_estate_registration_number
+            
+            # Si los archivos se proporcionan, los actualizamos
+            if public_deed:
+                public_deed_path = await self.save_file(public_deed, "uploads/files_lots/")
+                lot.public_deed = public_deed_path
+            
+            if freedom_tradition_certificate:
+                freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate, "uploads/files_lots/")
+                lot.freedom_tradition_certificate = freedom_tradition_certificate_path
+
+            # Guardar los cambios en la base de datos
+            self.db.commit()
+            self.db.refresh(lot)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": {
+                        "title": "Edición de lote",
+                        "message": "El lote ha sido editado satisfactoriamente"
+                    }
+                }
+            )
+
+        except Exception as e:
+            self.db.rollback()  # Revertir cambios si ocurre algún error
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Edición de lote",
+                        "message": f"Error al editar el lote, Contacta al administrador: {str(e)}"
+                    }
+                }
+            )
+
+    async def edit_property(self, user_id: int, property_id: int, name: str, longitude: float, latitude: float, 
+                            extension: float, real_estate_registration_number: int, public_deed: UploadFile = File(None), 
+                            freedom_tradition_certificate: UploadFile = File(None)):
+        """Editar un predio existente en la base de datos con la posibilidad de actualizar archivos"""
+
+        try:
+            # validar si existe la propiedad
+            existing_user = self.db.query(User).filter(User.id == user_id).first()
+            if not existing_user:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de predios",
+                            "message": f"El usuario a relacionar no existe en el sistema"
+                        }
+                    }
+                )
+            
+            # Verificar si el predio existe
+            property = self.db.query(Property).filter(Property.id == property_id).first()
+            if not property:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de predio",
+                            "message": "El predio no existe en el sistema"
+                        }
+                    }
+                )
+            
+            # Verificar si el número de registro de propiedad es único, pero no en el predio actual
+            existing_property = self.db.query(Property) \
+                .filter(Property.real_estate_registration_number == str(real_estate_registration_number)) \
+                .filter(Property.id != property_id) \
+                .first()
+
+            if existing_property:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de predio",
+                            "message": "El número de registro del predio ya existe en otro predio"
+                        }
+                    }
+                )
+            
+            # Actualizar la información del predio
+            property.name = name
+            property.longitude = longitude
+            property.latitude = latitude
+            property.extension = extension
+            property.real_estate_registration_number = real_estate_registration_number
+            
+            # Si los archivos se proporcionan, los actualizamos
+            if public_deed:
+                public_deed_path = await self.save_file(public_deed, "uploads/files_properties/")
+                property.public_deed = public_deed_path
+            
+            if freedom_tradition_certificate:
+                freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate, "uploads/files_properties/")
+                property.freedom_tradition_certificate = freedom_tradition_certificate_path
+
+            # Guardar los cambios en la base de datos
+            self.db.commit()
+            self.db.refresh(property)
+
+
+            # validar si el predio cambio de usuario o dueno
+            property_user = self.db.query(PropertyUser).filter(PropertyUser.property_id == property_id).first()
+
+            if property_user and property_user.user_id != user_id:
+                # si cambio de usuario, actualizar el usuario actual en el predio
+                property_user.user_id = user_id
+
+                # Guardar los cambios en la base de datos
+                self.db.commit()
+                self.db.refresh(property_user)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": {
+                        "title": "Edición de predio",
+                        "message": "El predio ha sido editado satisfactoriamente"
+                    }
+                }
+            )
+
+        except Exception as e:
+            self.db.rollback()  # Revertir cambios si ocurre algún error
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Edición de predio",
+                        "message": f"Error al editar el predio, Contacta al administrador: {str(e)}"
                     }
                 }
             )
