@@ -3,7 +3,7 @@ name: Test Backend
 on:
   push:
     branches:
-      - test  # Ejecutar las pruebas cuando se realice un push en la rama `test`
+      - test  # Ejecutar las pruebas cuando se realice un push en l rama `test`
 
 jobs:
   test-backend:

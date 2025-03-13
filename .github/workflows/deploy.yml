@@ -19,8 +19,8 @@ jobs:
     - name: Push Docker Image to Docker Hub  # Subir la imagen a Docker Hub
       run: |
         echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-        docker tag usuario/backend-distrito-riego:latest usuario/backend-distrito-riego:${{ github.sha }}
-        docker push usuario/backend-distrito-riego:latest
+        docker tag disriego/backend-distrito-riego:latest disriego/backend-distrito-riego:${{ github.sha }}
+        docker push disriego/backend-distrito-riego:latest
 
     - name: Deploy to Render  # Enviar un trigger para que Render haga el despliegue
       run: curl -X POST https://api.render.com/deploy/srv-cuvspiaj1k6c7389m8k0?key=${{ secrets.RENDER_API_KEY }}
