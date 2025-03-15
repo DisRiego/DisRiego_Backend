@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from app.users.models import User, RevokedToken
-from sqlalchemy.orm import Session
-from app.users.services import UserService
+from sqlalchemy.orm import Session , joinedload
+from app.roles.models import Role, Permission
 from Crypto.Protocol.KDF import scrypt
 import os
 
@@ -101,7 +101,12 @@ class AuthService:
     
     def get_user_by_username(self, username: str):
         try:
-            user = self.db.query(User).filter(User.email == username).first()
+            user = (
+                self.db.query(User)
+                .options(joinedload(User.roles).joinedload(Role.permissions))
+                .filter(User.email == username)
+                .first()
+            )
             if not user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado.")
             return user

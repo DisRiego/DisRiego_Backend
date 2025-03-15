@@ -1,22 +1,32 @@
-from fastapi import HTTPException
+import uuid
+from datetime import datetime, timedelta
+from fastapi import HTTPException ,Depends, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy.orm import Session
-from app.users.models import Gender, Status, TypeDocument, User
+from sqlalchemy.orm import Session , joinedload
+from app.users.models import Gender, Status, TypeDocument, User, PasswordReset
 from Crypto.Protocol.KDF import scrypt
+from app.users.schemas import UserCreateRequest , ChangePasswordRequest
+from app.roles.models import Role 
 import os
+from passlib.context import CryptContext
+from fastapi.security import OAuth2PasswordBearer
+from app.auth.services import SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 class UserService:
-    """Clase para gestionar la creación, autenticación y actualización de usuarios"""
+    """Clase para gestionar la creación y obtención de usuarios"""
 
     def __init__(self, db: Session):
         self.db = db
 
     def get_user_by_username(self, username: str):
-        """Obtener un usuario por su nombre de usuario (email)"""
         try:
             user = self.db.query(User).filter(User.email == username).first()
             if not user:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
             return user
         except Exception as e:
             raise HTTPException(status_code=500, detail={"success": False, "data": {
@@ -24,27 +34,43 @@ class UserService:
                 "message" : str(e),
             }})
 
-    def create_user(self, email: str, password: str, name: str, **kwargs):
-        """Crear un nuevo usuario con todos los campos"""
+    def create_user(self, user_data: UserCreateRequest):
         try:
-            salt, hashed_password = self.hash_password(password)
             db_user = User(
-                email=email,
-                password=hashed_password,
-                password_salt=salt,
-                name=name,
-                **kwargs
+                name=user_data.first_name,
+                first_last_name=user_data.first_last_name,
+                second_last_name=user_data.second_last_name,
+                type_document_id=user_data.document_type,
+                document_number=user_data.document_number,
+                date_issuance_document=user_data.date_issuance_document
+                
             )
+            
+            if user_data.role_id:
+                
+                roles = self.db.query(Role).filter(Role.id.in_(user_data.role_id)).all()
+                db_user.roles = roles
+
             self.db.add(db_user)
             self.db.commit()
             self.db.refresh(db_user)
-            return {"success": True, "data": "Usuario creado correctamente"}
+
+            return {"success": True, "title":"Éxito","data": "Usuario creado correctamente"}
+
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title" : f"Contacta con el administrador",
-                "message" : str(e),
-            }})
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Error al crear usuario",
+                        "message": str(e),
+                    },
+                },
+            )
+
+
 
     def hash_password(self, password: str) -> tuple:
         """Generar un hash de la contraseña con salt aleatorio"""
@@ -88,96 +114,34 @@ class UserService:
                 "message" : str(e),
             }})
 
-    def list_user(self, user_id: int):
-        """obtener los detalles de un usuario"""
-        try:
-            # Filtramos los campos que queremos devolver utilizando `with_entities()`
-            user = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
-                User.id,
-                User.email,
-                User.name,
-                User.first_last_name,
-                User.second_last_name,
-                User.address,
-                User.profile_picture,
-                User.phone,
-                User.date_issuance_document,
-                User.type_document_id,
-                TypeDocument.name.label("type_document_name"),  # Acceso al campo de la relación TypeDocument
-                User.status_id,
-                Status.name.label("status_name"),  # Cambié 'status_user' por 'status'
-                Status.description.label("status_description"),
-                User.gender_id,
-                Gender.name.label("gender_name"),
-            ).filter(User.id == user_id).first()
-            if not user:
-                return {
-                    "success": False,
-                    "data": {
-                        "title" : f"Error al obtener el usuario",
-                        "message" : "Usuario no encontrado.",
-                        }
-                    }
-            # Convertir el resultado a un diccionario antes de devolverlo
-            user_dict = {
-                "id": user.id,
-                "email": user.email,
-                "name": user.name,
-                "first_last_name": user.first_last_name,
-                "second_last_name": user.second_last_name,
-                "address": user.address,
-                "profile_picture": user.profile_picture,
-                "phone": user.phone,
-                "date_issuance_document" : user.date_issuance_document, # fecha de expedicion
-                "status": user.status_id,
-                "status_name": user.status_name,
-                "status_description": user.status_description,
-                "type_document": user.type_document_id,
-                "type_document_name": user.type_document_name,
-                "gender": user.gender_id,
-                "gender_name": user.gender_name,
-            }
-
-            # consulta los roles del usuario
-            user = self.db.query(User).filter(User.id == user_id).first()
-
-            # Obtener roles del usuario
-            user_roles = [{"id": role.id, "name": role.name} for role in user.roles]
-
-            # Para agregar los roles al diccionario
-            user_dict["roles"] = user_roles
-            
-            return jsonable_encoder({"success": True, "data": [user_dict]})  # Usamos jsonable_encoder
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title" : f"Contacta con el administrador",
-                "message" : str(e),
-            }})
-        
     def list_users(self):
-        """Obtener todos los usuarios con sus detalles"""
         try:
-            # Filtramos los campos que queremos devolver utilizando `with_entities()`
-            users = self.db.query(User).join(User.type_document).join(User.status_user).join(User.gender).with_entities(
-                User.id,
-                User.email,
-                User.name,
-                User.first_last_name,
-                User.second_last_name,
-                User.address,
-                User.profile_picture,
-                User.phone,
-                User.date_issuance_document,
-                User.type_document_id,
-                TypeDocument.name.label("type_document_name"),
-                User.status_id,
-                Status.name.label("status_name"),
-                Status.description.label("status_description"),
-                User.gender_id,
-                Gender.name.label("gender_name"),
-            ).all()  #  obtener todos los usuarios
-            
+            users = (
+                self.db.query(
+                    User.id,
+                    User.email,
+                    User.name,
+                    User.first_last_name,
+                    User.second_last_name,
+                    User.address,
+                    User.profile_picture,
+                    User.phone,
+                    User.document_number,  # Campo corregido
+                    User.date_issuance_document,
+                    User.type_document_id,
+                    TypeDocument.name.label("type_document_name"),
+                    User.status_id,
+                    Status.name.label("status_name"),
+                    Status.description.label("status_description"),
+                    User.gender_id,
+                    Gender.name.label("gender_name"),
+                )
+                .outerjoin(User.type_document)
+                .outerjoin(User.status_user)
+                .outerjoin(User.gender)
+                .all()
+            )
+
             if not users:
                 return {
                     "success": False,
@@ -186,10 +150,7 @@ class UserService:
                         "message": "No se encontraron usuarios."
                     }
                 }
-            
-            print([users])
 
-            # Convertir los resultados a diccionarios
             users_list = []
             for user in users:
                 user_dict = {
@@ -201,7 +162,8 @@ class UserService:
                     "address": user.address,
                     "profile_picture": user.profile_picture,
                     "phone": user.phone,
-                    "date_issuance_document": user.date_issuance_document,  # fecha de expedición
+                    "date_issuance_document": user.date_issuance_document,
+                    "document_number": user.document_number,  # Campo agregado
                     "status": user.status_id,
                     "status_name": user.status_name,
                     "status_description": user.status_description,
@@ -213,18 +175,13 @@ class UserService:
 
                 # Consultamos los roles del usuario, incluso si no tiene roles asignados
                 user_obj = self.db.query(User).filter(User.id == user.id).first()
-
-                # Si no tiene roles asignados, se asigna una lista vacía
                 user_roles = [{"id": role.id, "name": role.name} for role in user_obj.roles] if user_obj.roles else []
-
-                # Agregar los roles al diccionario del usuario
                 user_dict["roles"] = user_roles
 
-                # Añadir el diccionario a la lista de usuarios
                 users_list.append(user_dict)
 
-            return jsonable_encoder({"success": True, "data": users_list})  # Usamos jsonable_encoder para convertir a formato JSON
-
+            return jsonable_encoder({"success": True, "data": users_list})
+            
         except Exception as e:
             raise HTTPException(status_code=500, detail={
                 "success": False,
@@ -233,6 +190,10 @@ class UserService:
                     "message": str(e),
                 }
             })
+
+
+
+
 
     def change_user_status(self, user_id: int, new_status: int):
         """Cambiar el estado de un usuario"""
@@ -282,3 +243,152 @@ class UserService:
                 }
             })
         
+
+    def generate_reset_token(self, email: str) -> str:
+        """
+        Genera un token único para restablecer la contraseña y lo guarda en la BD.
+        Si existen tokens previos para el mismo email, se eliminan para inhabilitarlos.
+        """
+        # Eliminar tokens previos para el mismo email
+        previous_tokens = self.db.query(PasswordReset).filter(PasswordReset.email == email).all()
+        for token_obj in previous_tokens:
+            self.db.delete(token_obj)
+        self.db.commit()
+
+        token = str(uuid.uuid4())
+        expiration_time = datetime.utcnow() + timedelta(hours=1)  # Token válido por 1 hora
+        password_reset = PasswordReset(email=email, token=token, expiration=expiration_time)
+        self.db.add(password_reset)
+        self.db.commit()
+        return token
+
+    def update_password(self, token: str, new_password: str):
+        """
+        Actualiza la contraseña del usuario utilizando el token de restablecimiento.
+        """
+        password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
+        if not password_reset:
+            raise HTTPException(status_code=404, detail="Token inválido o expirado")
+
+        if password_reset.expiration < datetime.utcnow():
+            raise HTTPException(status_code=400, detail="El token ha expirado")
+
+        user = self.db.query(User).filter(User.email == password_reset.email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Genera un nuevo salt y hash para la nueva contraseña
+        new_salt, new_hash = self.hash_password(new_password)
+        user.password = new_hash
+        user.password_salt = new_salt
+        self.db.commit()
+
+        # Eliminar el token usado
+        self.db.delete(password_reset)
+        self.db.commit()
+
+        return {"message": "Contraseña actualizada correctamente"}
+
+    
+    def change_user_password(self, user_id: int, password_data: ChangePasswordRequest):
+        """Actualiza la contraseña de un usuario verificando la contraseña actual."""
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="Usuario no encontrado")
+            
+            # Si no hay un salt configurado
+            if user.password_salt is None:
+                raise HTTPException(
+                    status_code=400, 
+                    detail="El usuario no tiene una contraseña configurada. Por favor, utilice la opción de recuperación de contraseña."
+                )
+            
+            # Verifica que la contraseña actual proporcionada coincida con la almacenada usando el método verify_password
+            if not self.verify_password(user.password_salt, user.password, password_data.old_password):
+                raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+            
+            # Genera un nuevo salt y hash usando el método hash_password
+            new_salt, new_hash = self.hash_password(password_data.new_password)
+            user.password = new_hash
+            user.password_salt = new_salt
+            self.db.commit()
+            return {"success": True, "data": "Contraseña actualizada correctamente"}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail={"success": False, "data": {
+                "title": "Error al actualizar la contraseña",
+                "message": str(e)
+            }})
+
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+    def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+        """
+        Extrae y decodifica la información del token.
+        Se espera que el token contenga en su payload los datos del usuario,
+        incluyendo los permisos (como lista de diccionarios en la clave "permisos").
+        """
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            return payload  # El payload es un dict con la información del usuario
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    def list_user(self, user_id: int):
+        """
+        Obtiene la información completa de un usuario, incluyendo relaciones:
+        type_document, status_user, gender y roles.
+        """
+        try:
+            user = (
+                self.db.query(User)
+                .options(
+                    joinedload(User.type_document),
+                    joinedload(User.status_user),
+                    joinedload(User.gender),
+                    joinedload(User.roles)
+                )
+                .filter(User.id == user_id)
+                .first()
+            )
+            if not user:
+                return {
+                    "success": False,
+                    "data": {
+                        "title": "Error al obtener el usuario",
+                        "message": "Usuario no encontrado."
+                    }
+                }
+            
+            user_dict = {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "first_last_name": user.first_last_name,
+                "second_last_name": user.second_last_name,
+                "address": user.address,
+                "profile_picture": user.profile_picture,
+                "phone": user.phone,
+                "document_number": user.document_number,
+                "date_issuance_document": user.date_issuance_document,
+                "type_document_id": user.type_document_id,
+                "status_id": user.status_id,
+                "gender_id": user.gender_id,
+                # Si las relaciones están cargadas, se obtienen sus nombres
+                "type_document_name": user.type_document.name if user.type_document else None,
+                "status_name": user.status_user.name if user.status_user else None,
+                "status_description": user.status_user.description if user.status_user else None,
+                "gender_name": user.gender.name if user.gender else None,
+                "roles": [{"id": role.id, "name": role.name} for role in user.roles],
+            }
+            
+            return jsonable_encoder({"success": True, "data": [user_dict]})
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al obtener la información del usuario: {str(e)}"
+            )

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.users.models import RevokedToken
 from jose import jwt, JWTError
-from app.auth import AuthService
+from app.auth.services import AuthService
 
 # **Middleware de Logging para registrar peticiones**
 class LoggingMiddleware(BaseHTTPMiddleware):

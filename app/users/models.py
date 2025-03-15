@@ -3,7 +3,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
 from pydantic import BaseModel
-from app.roles.models import Role, user_role_table  # Asegúrate de que estos existan
+from app.roles.models import Role, user_role_table  
 
 class ChangeUserStatusRequest(BaseModel):
     """Modelo para cambiar el estado de un usuario"""
@@ -30,17 +30,17 @@ class User(Base):
     address = Column(String, nullable=True)
     profile_picture = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    type_document_id = Column(Integer, ForeignKey('type_document.id'), nullable=True)  # Llave foránea a TypeDocument
-    status_id = Column(Integer, ForeignKey('status_user.id'), nullable=True)  # Llave foránea a Status
-    gender_id = Column(Integer, ForeignKey('gender.id'), nullable=True)  # Llave foránea a Gender
+    type_document_id = Column(Integer, ForeignKey('type_document.id'), nullable=True)  
+    status_id = Column(Integer, ForeignKey('status_user.id'), nullable=True)  
+    gender_id = Column(Integer, ForeignKey('gender.id'), nullable=True)  
 
     # Relación con roles
     roles = relationship("Role", secondary=user_role_table, back_populates="users")
     type_document = relationship("TypeDocument", back_populates="users")
-    status_user = relationship("Status", back_populates="users")  # Aquí está la relación corregida
+    status_user = relationship("Status", back_populates="users")  
     gender = relationship("Gender", back_populates="users")
 
-    __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
+    __table_args__ = {'extend_existing': True}  
 
 class RevokedToken(Base):
     """Modelo para almacenar tokens revocados (para cierre de sesión)"""
@@ -52,6 +52,7 @@ class RevokedToken(Base):
 
     def has_expired(self):
         return datetime.utcnow() > self.expires_at
+
     
 class TypeDocument(Base):
     """Modelo para el Tipo de Documento"""
@@ -63,7 +64,7 @@ class TypeDocument(Base):
     # Relación con los usuarios (uno a muchos)
     users = relationship("User", back_populates="type_document")
 
-    __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
+    __table_args__ = {'extend_existing': True}  
 
 class Gender(Base):
     """Modelo para el Tipo de Documento"""
@@ -75,7 +76,7 @@ class Gender(Base):
     # Relación con los usuarios (uno a muchos)
     users = relationship("User", back_populates="gender")
 
-    __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
+    __table_args__ = {'extend_existing': True}  
 
 class Status(Base):
     """Modelo para los estados del usuario"""
@@ -86,7 +87,16 @@ class Status(Base):
     description = Column(String, nullable=False)
 
     # Relación con los usuarios (uno a muchos)
-    users = relationship("User", back_populates="status_user")  # Aquí cambiamos 'status_user' por 'status'
+    users = relationship("User", back_populates="status_user")  
 
     __table_args__ = {'extend_existing': True}  # Evita redefinir la tabla
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True)
+    token = Column(String, unique=True, index=True)
+    expiration = Column(DateTime, default=datetime.utcnow)
 
