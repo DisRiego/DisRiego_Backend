@@ -76,7 +76,7 @@ class RoleService:
                     "data": f"Los siguientes permisos no existen: {list(missing_permissions)}"
                 })
 
-            db_role = models.Role(name=role_data.name, description=role_data.description, status= True)
+            db_role = models.Role(name=role_data.name, description=role_data.description, status= 1)
             db_role.permissions = permissions
             self.db.add(db_role)
             self.db.commit()
@@ -100,25 +100,24 @@ class RoleService:
                     r.id AS role_id,
                     r.name AS role_name,
                     r.description AS role_description,
-                    CASE 
-                        WHEN r.status THEN 'Activo' 
-                        ELSE 'Inactivo' 
-                    END AS status_name,
+                    v.name AS status_name,
                     r.status,
-                    COUNT(ur.id) AS quantity_users,
-                    STRING_AGG(
+                    count(ur.id) AS quantity_users,
+                    string_agg(
                         CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
                     ) AS permissions
                 FROM
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
+                    LEFT JOIN vars v ON r.status = v.id
                     LEFT JOIN rol_permission rp ON rp.rol_id = r.id  -- Relación con la tabla de permisos
                     LEFT JOIN permission p ON p.id = rp.permission_id  -- Relación con la tabla de permisos
                 GROUP BY
                     r.id,
                     r.name,
                     r.description,
-                    r.status;
+                    v.name,
+                    r.status
             """
             # Ejecutamos la consulta SQL y obtenemos el resultado como una lista de diccionarios
             roles = self.db.execute(text(query)).fetchall()
