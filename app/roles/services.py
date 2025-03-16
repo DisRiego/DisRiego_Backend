@@ -399,5 +399,3 @@ class UserRoleService:
           }
       except SQLAlchemyError:
           raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener la información del usuario."})
-
-    
