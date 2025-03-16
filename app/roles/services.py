@@ -76,7 +76,7 @@ class RoleService:
                     "data": f"Los siguientes permisos no existen: {list(missing_permissions)}"
                 })
 
-            db_role = models.Role(name=role_data.name, description=role_data.description, status= 1)
+            db_role = models.Role(name=role_data.name, description=role_data.description, status= True)
             db_role.permissions = permissions
             self.db.add(db_role)
             self.db.commit()
