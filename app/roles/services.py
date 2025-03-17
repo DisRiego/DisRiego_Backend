@@ -79,7 +79,7 @@ class RoleService:
                     "data": f"Los siguientes permisos no existen: {list(missing_permissions)}"
                 })
 
-            db_role = models.Role(name=role_data.name, description=role_data.description, status= True)
+            db_role = models.Role(name=role_data.name, description=role_data.description, status=1)
             db_role.permissions = permissions
             self.db.add(db_role)
             self.db.commit()
@@ -105,7 +105,7 @@ class RoleService:
             
             db_role.description = role_data.description
             if len(role_data.permissions) == 0:
-              raise HTTPException(status_code=400, detail={"success": False, "data": "El usuario debe tener al menos un rol asignado."})
+              raise HTTPException(status_code=400, detail={"success": False, "data": "El rol debe tener al menos un permiso asignado."})
           
             permissions = self.db.query(models.Permission).filter(models.Permission.id.in_(role_data.permissions)).all()
             found_permission_ids = {perm.id for perm in permissions}
