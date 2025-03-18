@@ -16,36 +16,44 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=True)
-    password = Column(String)
-    password_salt = Column(String)
+    password = Column(String, nullable=True)  # Ahora puede ser null inicialmente
+    password_salt = Column(String, nullable=True)  # Ahora puede ser null inicialmente
     name = Column(String)
     email_status = Column(Boolean, nullable=True)
     document_number = Column(Integer, nullable=True)
     date_issuance_document = Column(DateTime, nullable=True)
     type_person_id = Column(Integer, nullable=True)
     birthday = Column(DateTime, nullable=True)
-    gender_id = Column(Integer, nullable=True)
+    gender_id = Column(Integer, ForeignKey('gender.id'), nullable=True)
     first_last_name = Column(String, nullable=True)
     second_last_name = Column(String, nullable=True)
     address = Column(String, nullable=True)
     profile_picture = Column(String, nullable=True)
     phone = Column(String, nullable=True)
-    # Nuevos campos para registro de usuario
-    country = Column(Integer, nullable=True)
-    department = Column(Integer, nullable=True)
+    country = Column(String, nullable=True)
+    department = Column(String, nullable=True)
     municipality = Column(Integer, nullable=True)
-    first_login_complete = Column(Boolean, default=False)  # Indica si el usuario completo su primer registro
+    first_login_complete = Column(Boolean, default=False)
     type_document_id = Column(Integer, ForeignKey('type_document.id'), nullable=True)  
     status_id = Column(Integer, ForeignKey('status_user.id'), nullable=True)  
     gender_id = Column(Integer, ForeignKey('gender.id'), nullable=True)  
+    
+    # Nuevos campos para el pre-registro
+    is_pre_registered = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=False)
+    last_pre_register_attempt = Column(DateTime, nullable=True)
+    pre_register_attempts = Column(Integer, default=0)
 
-    # Relación con roles
+    # Relaciones
     roles = relationship("Role", secondary=user_role_table, back_populates="users")
     type_document = relationship("TypeDocument", back_populates="users")
     status_user = relationship("Status", back_populates="users")  
     gender = relationship("Gender", back_populates="users")
-
-    __table_args__ = {'extend_existing': True}  
+    pre_register_tokens = relationship("PreRegisterToken", back_populates="user")
+    activation_tokens = relationship("ActivationToken", back_populates="user")
+    social_accounts = relationship("SocialAccount", back_populates="user")  # Nueva relación
+    social_accounts = relationship("SocialAccount", back_populates="user", cascade="all, delete-orphan")
+    __table_args__ = {'extend_existing': True}
 
 class RevokedToken(Base):
     """Modelo para almacenar tokens revocados (para cierre de sesión)"""
@@ -125,4 +133,59 @@ class PasswordReset(Base):
     email = Column(String, index=True)
     token = Column(String, unique=True, index=True)
     expiration = Column(DateTime, default=datetime.utcnow)
+
+class PreRegisterToken(Base):
+    """
+    Modelo para almacenar tokens de validación para el pre-registro.
+    """
+    __tablename__ = "pre_register_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    
+    # Relación con el usuario
+    user = relationship("User", back_populates="pre_register_tokens")
+
+class ActivationToken(Base):
+    """
+    Modelo para almacenar tokens de activación de cuenta enviados por email.
+    """
+    __tablename__ = "activation_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+    used = Column(Boolean, default=False)
+    
+    # Relación con el usuario
+    user = relationship("User", back_populates="activation_tokens")
+
+class SocialAccount(Base):
+    """Modelo para almacenar cuentas sociales vinculadas a usuarios"""
+    __tablename__ = "social_accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    provider = Column(String, nullable=False)  # 'google' o 'microsoft'
+    provider_user_id = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    access_token = Column(String, nullable=True)
+    refresh_token = Column(String, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relación con el usuario
+    user = relationship("User", back_populates="social_accounts")
+
+    __table_args__ = {'extend_existing': True}
+    
+    def __repr__(self):
+        return f"<SocialAccount(id={self.id}, provider={self.provider}, email={self.email})>"
 

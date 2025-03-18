@@ -6,7 +6,7 @@ from app.users import schemas
 from app.users.models import ChangeUserStatusRequest
 from app.users.services import UserService
 from app.auth.services import admin_required, get_current_user
-from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateRequest, AdminUserCreateResponse
+from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateRequest, AdminUserCreateResponse, PreRegisterValidationRequest, PreRegisterCompleteRequest, PreRegisterResponse, ActivateAccountRequest, ActivateAccountResponse
 from typing import Optional, List
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -357,3 +357,61 @@ def get_genders(
             status_code=500,
             detail=f"Error al obtener los géneros: {str(e)}"
         )
+
+@router.post("/pre-register/validate", response_model=PreRegisterResponse)
+async def validate_document_for_pre_register(
+    request: PreRegisterValidationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Valida que el documento existe en el sistema y está asociado a un usuario
+    creado por un administrador que aún no ha completado su registro.
+    """
+    try:
+        user_service = UserService(db)
+        return await user_service.validate_for_pre_register(
+            document_type_id=request.document_type_id,
+            document_number=request.document_number,
+            date_issuance_document=request.date_issuance_document
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en la validación: {str(e)}")
+
+@router.post("/pre-register/complete", response_model=PreRegisterResponse)
+async def complete_pre_register(
+    request: PreRegisterCompleteRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Completa el pre-registro del usuario añadiendo email y contraseña,
+    y envía un correo con enlace de activación.
+    """
+    try:
+        user_service = UserService(db)
+        return await user_service.complete_pre_register(
+            token=request.token,
+            email=request.email,
+            password=request.password
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al completar el pre-registro: {str(e)}")
+
+@router.get("/activate-account/{activation_token}", response_model=ActivateAccountResponse)
+async def activate_account(
+    activation_token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Activa la cuenta del usuario a través del enlace enviado por email.
+    """
+    try:
+        user_service = UserService(db)
+        return await user_service.activate_account(activation_token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al activar la cuenta: {str(e)}")

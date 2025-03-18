@@ -7,6 +7,12 @@ from sqlalchemy.orm import Session, joinedload
 from app.roles.models import Role, Permission
 from Crypto.Protocol.KDF import scrypt
 import os
+import json
+import requests
+from typing import Dict, Any, Optional
+from app.auth.schemas import OAuthUserInfo, SocialLoginResponse
+from app.users.models import SocialAccount
+
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
@@ -180,4 +186,185 @@ def admin_required(current_user: dict):
         )
         
     return current_user
+
+class OAuthService:
+    """Servicio para gestionar la autenticación con proveedores OAuth"""
+
+    def __init__(self, db: Session):
+        self.db = db
+        # Credenciales para Google OAuth
+        self.google_client_id = os.getenv("GOOGLE_CLIENT_ID", "")
+        self.google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET", "")
+        self.google_redirect_uri = os.getenv("GOOGLE_REDIRECT_URI", "")
+
+        # Credenciales para Microsoft OAuth
+        self.microsoft_client_id = os.getenv("MICROSOFT_CLIENT_ID", "")
+        self.microsoft_client_secret = os.getenv("MICROSOFT_CLIENT_SECRET", "")
+        self.microsoft_redirect_uri = os.getenv("MICROSOFT_REDIRECT_URI", "")
+
+    def get_login_url(self, provider: str, redirect_uri: str) -> Dict[str, str]:
+        """
+        Genera la URL para iniciar el flujo de OAuth con el proveedor seleccionado
+        """
+        if provider == "google":
+            return self._get_google_login_url(redirect_uri)
+        elif provider == "microsoft":
+            return self._get_microsoft_login_url(redirect_uri)
+        else:
+            raise ValueError(f"Proveedor no soportado: {provider}")
+
+    def _get_google_login_url(self, redirect_uri: str) -> Dict[str, str]:
+        """Genera URL para autenticación con Google"""
+        auth_url = "https://accounts.google.com/o/oauth2/v2/auth"
+        scope = "openid email profile"
+        state = "google_state_token"  # Generar un token aleatorio en producción
+
+        auth_uri = (
+            f"{auth_url}?client_id={self.google_client_id}&response_type=code&"
+            f"scope={scope}&redirect_uri={redirect_uri}&state={state}&"
+            f"access_type=offline&prompt=consent"
+        )
+        return {"auth_url": auth_uri, "state": state}
+
+    def _get_microsoft_login_url(self, redirect_uri: str) -> Dict[str, str]:
+        """Genera URL para autenticación con Microsoft"""
+        auth_url = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+        scope = "openid email profile User.Read"
+        state = "microsoft_state_token"  # Generar un token aleatorio en producción
+
+        auth_uri = (
+            f"{auth_url}?client_id={self.microsoft_client_id}&response_type=code&"
+            f"scope={scope}&redirect_uri={redirect_uri}&state={state}&response_mode=query"
+        )
+        return {"auth_url": auth_uri, "state": state}
+
+    async def process_oauth_callback(self, provider: str, code: str) -> SocialLoginResponse:
+        """
+        Procesa el callback de autenticación OAuth
+        """
+        try:
+            if provider == "google":
+                user_info = await self._get_google_user_info(code)
+            elif provider == "microsoft":
+                user_info = await self._get_microsoft_user_info(code)
+            else:
+                return SocialLoginResponse(success=False, message=f"Proveedor no soportado: {provider}")
+
+            # Verificar si ya existe una cuenta social asociada
+            social_account = self.db.query(SocialAccount).filter(
+                SocialAccount.provider == provider,
+                SocialAccount.provider_user_id == user_info.provider_user_id
+            ).first()
+
+            is_new_user = False
+
+            if social_account:
+                user = social_account.user
+                social_account.email = user_info.email
+                social_account.updated_at = datetime.utcnow()
+            else:
+                user = self.db.query(User).filter(User.email == user_info.email).first()
+                if not user:
+                    user = User(
+                        email=user_info.email,
+                        name=user_info.name or user_info.email.split('@')[0],
+                        is_active=True,
+                        status_id=1
+                    )
+                    self.db.add(user)
+                    self.db.flush()
+                    is_new_user = True
+
+                social_account = SocialAccount(
+                    user_id=user.id,
+                    provider=provider,
+                    provider_user_id=user_info.provider_user_id,
+                    email=user_info.email
+                )
+                self.db.add(social_account)
+
+            self.db.commit()
+
+            # Generar token JWT
+            token_data = {
+                "sub": user.email,
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+            }
+            access_token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
+
+            return SocialLoginResponse(
+                success=True,
+                message="Inicio de sesión exitoso",
+                access_token=access_token,
+                token_type="bearer",
+                user_info={"id": user.id, "email": user.email, "name": user.name},
+                is_new_user=is_new_user
+            )
+
+        except Exception as e:
+            self.db.rollback()
+            return SocialLoginResponse(success=False, message=f"Error en la autenticación: {str(e)}")
+
+    async def _get_google_user_info(self, code: str) -> OAuthUserInfo:
+        """Obtiene información del usuario de Google"""
+        token_url = "https://oauth2.googleapis.com/token"
+        token_payload = {
+            "code": code,
+            "client_id": self.google_client_id,
+            "client_secret": self.google_client_secret,
+            "redirect_uri": self.google_redirect_uri,
+            "grant_type": "authorization_code"
+        }
+        token_response = requests.post(token_url, data=token_payload)
+        token_data = token_response.json()
+
+        if "error" in token_data:
+            raise ValueError(f"Error al obtener token de Google: {token_data['error']}")
+
+        access_token = token_data["access_token"]
+        userinfo_url = "https://www.googleapis.com/oauth2/v3/userinfo"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        userinfo_response = requests.get(userinfo_url, headers=headers)
+        userinfo = userinfo_response.json()
+
+        return OAuthUserInfo(
+            provider="google",
+            provider_user_id=userinfo["sub"],
+            email=userinfo["email"],
+            name=userinfo.get("name"),
+            picture=userinfo.get("picture")
+        )
+
+    async def _get_microsoft_user_info(self, code: str) -> OAuthUserInfo:
+        """Obtiene información del usuario de Microsoft"""
+        token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        token_payload = {
+            "code": code,
+            "client_id": self.microsoft_client_id,
+            "client_secret": self.microsoft_client_secret,
+            "redirect_uri": self.microsoft_redirect_uri,
+            "grant_type": "authorization_code"
+        }
+        token_response = requests.post(token_url, data=token_payload)
+        token_data = token_response.json()
+
+        if "error" in token_data:
+            raise ValueError(f"Error al obtener token de Microsoft: {token_data['error']}")
+
+        access_token = token_data["access_token"]
+        userinfo_url = "https://graph.microsoft.com/v1.0/me"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        userinfo_response = requests.get(userinfo_url, headers=headers)
+        userinfo = userinfo_response.json()
+
+        return OAuthUserInfo(
+            provider="microsoft",
+            provider_user_id=userinfo["id"],
+            email=userinfo["userPrincipalName"],
+            name=userinfo.get("displayName"),
+            picture=None
+        )
 

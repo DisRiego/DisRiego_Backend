@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator, model_validator
+from pydantic import BaseModel, Field, validator, model_validator, EmailStr
 import re
 from typing import Optional, List
 from datetime import datetime, date
@@ -170,5 +170,57 @@ class UserEditRequest(BaseModel):
     address: Optional[str] = Field(None, description="Direccion completa")
     phone: Optional[str] = Field(None, description="Numero de telefono")
     profile_picture: Optional[str] = None
+
+class PreRegisterValidationRequest(BaseModel):
+    """Solicitud para validar documento antes del pre-registro"""
+    document_type_id: int = Field(..., description="ID del tipo de documento (1=CC, 2=TI, 3=CE)")
+    document_number: str = Field(..., min_length=5, max_length=30, description="Número de documento")
+    date_issuance_document: date = Field(..., description="Fecha de expedición del documento")
+
+    @validator('document_number')
+    def validate_document_number(cls, v):
+        if not v.isdigit():
+            raise ValueError("El número de documento debe contener solo dígitos")
+        return v
+
+class PreRegisterCompleteRequest(BaseModel):
+    """Solicitud para completar el pre-registro con email y contraseña"""
+    token: str = Field(..., description="Token de validación")
+    email: EmailStr = Field(..., description="Correo electrónico")
+    password: str = Field(..., min_length=8, max_length=128, description="Contraseña")
+    password_confirmation: str = Field(..., min_length=8, max_length=128, description="Confirmación de contraseña")
+    
+    @validator('password')
+    def validate_password_strength(cls, v):
+        """Validar que la contraseña tiene al menos una minúscula, una mayúscula y un número"""
+        if not re.search(r'[a-z]', v):
+            raise ValueError("La contraseña debe contener al menos una letra minúscula")
+        if not re.search(r'[A-Z]', v):
+            raise ValueError("La contraseña debe contener al menos una letra mayúscula")
+        if not re.search(r'[0-9]', v):
+            raise ValueError("La contraseña debe contener al menos un número")
+        return v
+    
+    @validator('password_confirmation')
+    def passwords_match(cls, v, values, **kwargs):
+        """Validar que las contraseñas coinciden"""
+        if 'password' in values and v != values['password']:
+            raise ValueError("Las contraseñas no coinciden")
+        return v
+
+class PreRegisterResponse(BaseModel):
+    """Respuesta para el proceso de pre-registro"""
+    success: bool
+    message: str
+    token: Optional[str] = None
+
+class ActivateAccountRequest(BaseModel):
+    """Solicitud para activar la cuenta mediante el enlace enviado por email"""
+    activation_token: str
+
+class ActivateAccountResponse(BaseModel):
+    """Respuesta para la activación de cuenta"""
+    success: bool
+    message: str
 
 

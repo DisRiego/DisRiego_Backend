@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session , joinedload
 from datetime import datetime
 from jose import jwt, JWTError
 from app.database import get_db
-from app.auth.services import AuthService, SECRET_KEY
-from app.auth.schemas import ResetPasswordRequest, ResetPasswordResponse, UpdatePasswordRequest
+from app.auth.services import AuthService, SECRET_KEY, OAuthService
+from app.auth.schemas import ResetPasswordRequest, ResetPasswordResponse, UpdatePasswordRequest, OAuthLoginRequest, OAuthCallbackRequest, SocialLoginResponse
 from app.users.schemas import UserLogin, Token
 from app.users.services import UserService
 from app.roles.models import Role, Permission 
@@ -23,12 +23,18 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
     auth_service = AuthService(db)
     
-    
+    # Autenticar usuario
     user = auth_service.authenticate_user(user_credentials.email, user_credentials.password)
     if not user:
-        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+        raise HTTPException(
+            status_code=401, 
+            detail={
+                "success": False,
+                "data": "Credenciales inválidas. Verifica tu correo y contraseña."
+            }
+        )
     
-    
+    # Obtener usuario con roles y permisos
     user = (
         db.query(User)
         .options(joinedload(User.roles).joinedload(Role.permissions))
@@ -36,7 +42,17 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         .first()
     )
     
-   
+    # Verificar si la cuenta está activa
+    if user.status_id != 1:  # Asumiendo que 1 es "Activo"
+        raise HTTPException(
+            status_code=401, 
+            detail={
+                "success": False,
+                "data": "Esta cuenta no está activa. Por favor, contacta al administrador."
+            }
+        )
+    
+    # Construir datos de roles para el token
     roles = []
     for role in user.roles:
         role_data = {"id": role.id, "name": role.name}
@@ -44,7 +60,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         role_data["permisos"] = permisos  # Si no hay permisos, será una lista vacía
         roles.append(role_data)
     
-   
+    # Construir payload del token
     token_data = {
         "sub": user.email,   
         "id": user.id,
@@ -54,7 +70,9 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         "rol": roles
     }
     
+    # Generar token de acceso
     access_token = auth_service.create_access_token(data=token_data)
+    
     return {"access_token": access_token, "token_type": "bearer"}
 
 
@@ -94,3 +112,60 @@ def update_password(token: str, update_request: UpdatePasswordRequest, db: Sessi
     user_service = UserService(db)
     user_service.update_password(token, update_request.new_password)
     return ResetPasswordResponse(message="Contraseña actualizada correctamente", token=token)
+
+@router.post("/oauth/login", response_model=dict)
+async def oauth_login(request: OAuthLoginRequest, db: Session = Depends(get_db)):
+    """
+    Inicia el proceso de inicio de sesión con OAuth (Google o Microsoft)
+    
+    Args:
+        request: Solicitud con el proveedor y URI de redirección
+        
+    Returns:
+        Dict con la URL de autenticación y estado
+    """
+    try:
+        oauth_service = OAuthService(db)
+        login_data = oauth_service.get_login_url(
+            provider=request.provider,
+            redirect_uri=request.redirect_uri
+        )
+        return {"success": True, "data": login_data}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al iniciar sesión con {request.provider}: {str(e)}"
+        )
+
+@router.post("/oauth/callback", response_model=SocialLoginResponse)
+async def oauth_callback(request: OAuthCallbackRequest, db: Session = Depends(get_db)):
+    """
+    Procesa el callback de autenticación OAuth
+    
+    Args:
+        request: Solicitud con el proveedor y código de autorización
+        
+    Returns:
+        SocialLoginResponse con token JWT y datos del usuario
+    """
+    try:
+        oauth_service = OAuthService(db)
+        return await oauth_service.process_oauth_callback(
+            provider=request.provider,
+            code=request.code
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al procesar callback de {request.provider}: {str(e)}"
+        )
