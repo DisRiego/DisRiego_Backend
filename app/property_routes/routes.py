@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Security
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.property_routes.services import PropertyLotService
+from app.auth.security import get_current_user_id, verify_lot_management_permission
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
@@ -86,6 +87,56 @@ def list_properties(db: Session = Depends(get_db)):
         raise e  # Re-raise HTTPException for known errors
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los predios: {str(e)}")
+
+
+@router.post("/lot/{lot_id}/disable", response_model=dict)
+def disable_lot(
+    lot_id: int, 
+    details: str = None, 
+    db: Session = Depends(get_db),
+    current_user_id: int = Security(get_current_user_id)  # Función que obtiene el ID del usuario actual
+):
+    """
+    Inhabilitar un lote existente
+    
+    Args:
+        lot_id: ID del lote a inhabilitar
+        details: Detalles adicionales sobre la inhabilitación
+        
+    Returns:
+        Dict con el resultado de la operación
+    """
+    try:
+        service = PropertyLotService(db)
+        return service.disable_lot(lot_id, current_user_id, details)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar la solicitud: {str(e)}")
+
+@router.get("/lot/{lot_id}/history", response_model=dict)
+def get_lot_history(
+    lot_id: int, 
+    db: Session = Depends(get_db),
+    current_user_id: int = Security(get_current_user_id)  # Verificar permisos
+):
+    """
+    Obtener el historial de cambios de un lote
+    
+    Args:
+        lot_id: ID del lote
+        
+    Returns:
+        Dict con el historial de cambios
+    """
+    try:
+        service = PropertyLotService(db)
+        return service.get_lot_history(lot_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al procesar la solicitud: {str(e)}")
+
     
 @router.get("/{property_id}/lots/")
 def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
@@ -140,3 +191,4 @@ async def update_lot(property_id: int,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
     )
+

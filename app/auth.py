@@ -1,11 +1,12 @@
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from app.users import services  # Importa las funciones necesarias
+from app.users import services  # Importa las funciones de crud
 from app.users.models import User
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import os
 from typing import Optional, Dict
+from app.users.models import RevokedToken
 
 class AuthService:
     def __init__(self):
@@ -29,6 +30,13 @@ class AuthService:
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
         return encoded_jwt
+    
+    def revoke_token(self, db: Session, token: str, expires_at: datetime):
+        """Revoca un token, agregándolo a la lista de revocación."""
+        db_revoked = RevokedToken(token=token, expires_at=expires_at)
+        db.add(db_revoked)
+        db.commit()
+        return {"message": "Token revocado correctamente"}
 
     def get_user(self, db: Session, username: str) -> Optional[Dict]:
         """Obtiene un usuario de la base de datos y lo convierte en un diccionario JSON"""
