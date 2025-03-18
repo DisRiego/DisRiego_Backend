@@ -4,6 +4,7 @@ from app.roles.routes import router as roles_router
 from app.users.routes import router as users_router
 from app.auth.routes import router as auth_router
 from app.property_routes.routes import router as property_lot_router
+from app.my_company.routes import router as my_company_router
 from app.middlewares import setup_middlewares
 from app.exceptions import setup_exception_handlers
 
@@ -26,6 +27,7 @@ app.include_router(users_router)
 app.include_router(auth_router)
 
 app.include_router(property_lot_router)
+app.include_router(my_company_router)
 
 
 
