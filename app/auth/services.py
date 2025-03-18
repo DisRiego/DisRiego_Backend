@@ -1,8 +1,9 @@
-from fastapi import HTTPException
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
 from app.users.models import User, RevokedToken
-from sqlalchemy.orm import Session , joinedload
+from sqlalchemy.orm import Session, joinedload
 from app.roles.models import Role, Permission
 from Crypto.Protocol.KDF import scrypt
 import os
@@ -10,6 +11,8 @@ import os
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 class AuthService:
     """Clase para la gestión de autenticación"""
@@ -32,27 +35,6 @@ class AuthService:
             return encoded_jwt
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
-
-    # def authenticate_user(self, email: str, password: str) -> User:
-    #     """
-    #     Autenticar al usuario comparando la contraseña ingresada con la almacenada
-    #     :param email: Correo del usuario
-    #     :param password: Contraseña proporcionada por el usuario
-    #     :return: Usuario autenticado
-    #     """
-    #     try:
-    #         user_service = UserService(self.db)
-    #         user = user_service.get_user_by_username(email)
-    #         if not user:
-    #             raise HTTPException(status_code=404, detail="Usuario no encontrado")
-
-    #         # Verificar la contraseña usando la función verify_password
-    #         if not self.verify_password(user.password_salt, user.password, password):
-    #             raise HTTPException(status_code=401, detail="Credenciales inválidas")
-
-    #         return user
-    #     except Exception as e:
-    #         raise HTTPException(status_code=500, detail=f"Error al autenticar al usuario: {str(e)}")
 
     def revoke_token(self, db: Session, token: str, expires_at: datetime):
         """
@@ -152,3 +134,50 @@ class AuthService:
             return encoded_jwt
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
+
+def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+    """
+    Verifica el token JWT y retorna la información del usuario actual.
+    Si el token es inválido, lanza una excepción.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales inválidas",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+def admin_required(current_user: dict):
+    """
+    Verifica si el usuario actual tiene permisos de administrador.
+    Si no los tiene, lanza una excepción 403 Forbidden.
+    """
+    has_admin_permission = False
+    
+    # Verificar si el usuario tiene el rol o permiso de administrador
+    if "rol" in current_user:
+        roles = current_user["rol"]
+        
+        for role in roles:
+            # Verificar si el usuario tiene un rol de administrador
+            if role.get("name", "").lower() == "administrador":
+                has_admin_permission = True
+                break
+                
+            # Verificar si alguno de los roles tiene el permiso de administrador
+            permisos = role.get("permisos", [])
+            if any(perm.get("name") == "admin_usuarios" for perm in permisos):
+                has_admin_permission = True
+                break
+    
+    if not has_admin_permission:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para realizar esta acción. Se requieren permisos de administrador."
+        )
+        
+    return current_user
+
