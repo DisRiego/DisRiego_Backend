@@ -31,13 +31,14 @@ async def create_update_company_info(
     city: str = Form(...),
     address: str = Form(...),
     color_palette_id: int = Form(...),
+    logo: UploadFile = File(...),  
     db: Session = Depends(get_db)
 ):
     """
     Crea o actualiza la información de la empresa.
     
-    - Si no existe información previa, se crea un nuevo registro
-    - Si ya existe, se actualiza el registro existente
+    - Si no existe información previa, se crea un nuevo registro.
+    - Si ya existe, se actualiza el registro existente.
     """
     company_data = schemas.CompanyBase(
         name=name,
@@ -48,11 +49,13 @@ async def create_update_company_info(
         state=state,
         city=city,
         address=address,
+        logo="",  
         color_palette_id=color_palette_id
     )
     
     company_service = services.CompanyService(db)
-    return await company_service.create_company_info(company_data, None)
+    return await company_service.create_company_info(company_data, logo)
+
 
 # Rutas para paletas de colores
 @router.get("/color-palettes", summary="Listar todas las paletas de colores")
@@ -132,24 +135,26 @@ async def get_certificate(
     certificate_service = services.CertificateService(db)
     return await certificate_service.get_certificate(certificate_id)
 
+
 @router.post("/certificates", summary="Crear un nuevo certificado digital")
 async def create_certificate(
     serial_number: int = Form(...),
     start_date: date = Form(...),
     expiration_date: date = Form(...),
-    digital_certificateid: str = Form(...),
+    nit: int = Form(...),  
     certificate_file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     """
     Crea un nuevo certificado digital.
     """
+
     certificate_data = schemas.DigitalCertificateCreate(
         serial_number=serial_number,
         start_date=start_date,
         expiration_date=expiration_date,
-        attached="",  # Se llenará en el servicio
-        digital_certificateid=digital_certificateid
+        attached="",  
+        nit=nit
     )
     
     certificate_service = services.CertificateService(db)
@@ -161,26 +166,27 @@ async def update_certificate(
     serial_number: int = Form(...),
     start_date: date = Form(...),
     expiration_date: date = Form(...),
-    digital_certificateid: str = Form(...),
+    nit: int = Form(...),  
     certificate_file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
     """
     Actualiza un certificado digital existente.
     
-    - Si se proporciona un nuevo archivo, se actualiza
-    - Si no se proporciona, se mantiene el archivo existente
+    - Si se proporciona un nuevo archivo, se actualiza.
+    - Si no se proporciona, se mantiene el archivo existente.
     """
     certificate_data = schemas.DigitalCertificateCreate(
         serial_number=serial_number,
         start_date=start_date,
         expiration_date=expiration_date,
-        attached="",  # Se mantiene el valor existente o se actualiza
-        digital_certificateid=digital_certificateid
+        attached="",  
+        nit=nit
     )
     
     certificate_service = services.CertificateService(db)
     return await certificate_service.update_certificate(certificate_id, certificate_data, certificate_file)
+
 
 @router.delete("/certificates/{certificate_id}", summary="Eliminar un certificado digital")
 async def delete_certificate(

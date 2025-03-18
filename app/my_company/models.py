@@ -24,19 +24,20 @@ class Company(Base):
     __tablename__ = "company"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    nit = Column(Integer, nullable=False)
-    email = Column(String(45), nullable=False)
-    phone = Column(String(45), nullable=False)
-    country = Column(String(100), nullable=False)
-    state = Column(String(100), nullable=False)
-    city = Column(String(100), nullable=False)
-    address = Column(String(45), nullable=False)
-    color_palette_id = Column(Integer, ForeignKey("color_palette.id"), nullable=False)
+    name = Column(String(128), nullable=False)            
+    nit = Column(Integer, nullable=False)                   
+    email = Column(String(50), nullable=False)              
+    phone = Column(String(30), nullable=False)              
+    country = Column(String(128), nullable=False)          
+    state = Column(String(128), nullable=False)             
+    city = Column(String(128), nullable=False)              
+    address = Column(String(128), nullable=False)          
+    logo = Column(String(255), nullable=False)              
+    color_palette_id = Column(Integer, ForeignKey("color_palette.id"), nullable=False) 
+
     
-    # Relaciones
     color_palette = relationship("ColorPalette")
-    
+
     def __repr__(self):
         return f"<Company(id={self.id}, name={self.name}, nit={self.nit})>"
 
@@ -64,8 +65,8 @@ class DigitalCertificate(Base):
     start_date = Column(Date, nullable=False)
     expiration_date = Column(Date, nullable=False)
     attached = Column(String(255), nullable=False)
-    digital_certificateid = Column(String(45), nullable=False)
-    
+    nit = Column(Integer, nullable=False)  
+
     def __repr__(self):
         return f"<DigitalCertificate(id={self.id}, serial_number={self.serial_number})>"
     
@@ -74,11 +75,15 @@ class DigitalCertificate(Base):
         return datetime.now().date() > self.expiration_date
 
 class TypeCrop(Base):
-    """Modelo para tipos de cultivo"""
     __tablename__ = "type_crop"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(60), nullable=False)
+    name = Column(String(128), nullable=False)
+    harvest_time = Column(Integer, nullable=False)
+    payment_interval_id = Column(Integer, ForeignKey("payment_interval.id"), nullable=False)
+    
+    # Relación con PaymentInterval
+    payment_interval = relationship("PaymentInterval")
     
     def __repr__(self):
         return f"<TypeCrop(id={self.id}, name={self.name})>"
@@ -88,8 +93,8 @@ class PaymentInterval(Base):
     __tablename__ = "payment_interval"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(60), nullable=False)
-    description = Column(String(255), nullable=False)
+    name = Column(String(128), nullable=False)         
+    interval_days = Column(Integer, nullable=False)      
     
     def __repr__(self):
         return f"<PaymentInterval(id={self.id}, name={self.name})>"
@@ -102,9 +107,9 @@ class CompanyUser(Base):
     company_id = Column(Integer, ForeignKey("company.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     
-    # Relaciones
+
     company = relationship("Company")
-    # La relación con User depende de cómo esté definido tu modelo de Usuario
+
     
     def __repr__(self):
         return f"<CompanyUser(company_id={self.company_id}, user_id={self.user_id})>"

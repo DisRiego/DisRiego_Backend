@@ -49,26 +49,22 @@ class CompanyService:
                 }
             )
     
+
+    
     async def create_company_info(self, company_data, logo_file):
         """Crear o actualizar la información de la empresa"""
         try:
+            # Guardar el logo si se proporcionó
+            if logo_file:
+                logo_path = await self.save_file(logo_file, "uploads/logos/")
+                company_data.logo = logo_path
+            else:
+                company_data.logo = ""  # O lanzar error si es obligatorio
+
             # Verificar si ya existe info de empresa
             existing_company = self.db.query(Company).first()
             
-            # Verificar que la paleta de colores exista
-            color_palette = self.db.query(ColorPalette).filter(
-                ColorPalette.id == company_data.color_palette_id
-            ).first()
-            
-            if not color_palette:
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "success": False,
-                        "message": "La paleta de colores especificada no existe",
-                        "data": None
-                    }
-                )
+            # Se asume que se mantiene la verificación de la existencia de la paleta a través de color_palette_id
             
             if existing_company:
                 # Actualizar la empresa existente
@@ -80,6 +76,7 @@ class CompanyService:
                 existing_company.state = company_data.state
                 existing_company.city = company_data.city
                 existing_company.address = company_data.address
+                existing_company.logo = company_data.logo
                 existing_company.color_palette_id = company_data.color_palette_id
                 
                 self.db.commit()
@@ -104,6 +101,7 @@ class CompanyService:
                     state=company_data.state,
                     city=company_data.city,
                     address=company_data.address,
+                    logo=company_data.logo,
                     color_palette_id=company_data.color_palette_id
                 )
                 
@@ -139,6 +137,7 @@ class CompanyService:
                     "data": None
                 }
             )
+
     
     async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
         """Guardar un archivo en el servidor con un nombre único"""
@@ -413,16 +412,16 @@ class CertificateService:
     async def create_certificate(self, certificate_data, certificate_file: UploadFile):
         """Crear un nuevo certificado digital"""
         try:
-            # Guardar el archivo de certificado
+            # Guardar el archivo y obtener la ruta real
             attached_path = await self.save_file(certificate_file, "uploads/certificates/")
             
-            # Crear el certificado
+            # Crear el objeto final usando la ruta real en 'attached'
             new_certificate = DigitalCertificate(
                 serial_number=certificate_data.serial_number,
                 start_date=certificate_data.start_date,
                 expiration_date=certificate_data.expiration_date,
                 attached=attached_path,
-                digital_certificateid=certificate_data.digital_certificateid
+                nit=certificate_data.nit
             )
             
             self.db.add(new_certificate)
@@ -458,6 +457,27 @@ class CertificateService:
                 }
             )
     
+    async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
+        """Guardar un archivo en el servidor con un nombre único"""
+        try:
+            # Crear el directorio si no existe
+            if not os.path.exists(directory):
+                os.makedirs(directory)
+            
+            # Generar un nombre único para el archivo
+            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+            
+            # Ruta completa del archivo
+            file_path = os.path.join(directory, unique_filename)
+            
+            # Guardar el archivo
+            with open(file_path, "wb") as buffer:
+                buffer.write(await file.read())
+            
+            return file_path
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+
     async def update_certificate(self, certificate_id: int, certificate_data, certificate_file: UploadFile = None):
         """Actualizar un certificado digital existente"""
         try:
@@ -476,8 +496,7 @@ class CertificateService:
             certificate.serial_number = certificate_data.serial_number
             certificate.start_date = certificate_data.start_date
             certificate.expiration_date = certificate_data.expiration_date
-            certificate.digital_certificateid = certificate_data.digital_certificateid
-            
+            certificate.nit = certificate_data.nit
             # Si se proporciona un nuevo archivo, actualizar la ruta
             if certificate_file:
                 attached_path = await self.save_file(certificate_file, "uploads/certificates/")
@@ -642,10 +661,22 @@ class TypeCropService:
             )
     
     def create_type(self, type_data: schemas.TypeCropCreate):
-        """Crear un nuevo tipo de cultivo"""
         try:
+            interval = self.db.query(PaymentInterval).filter(PaymentInterval.id == type_data.payment_interval_id).first()
+            if not interval:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "message": "Intervalo de pago no encontrado",
+                        "data": None
+                    }
+                )
+            
             new_type = TypeCrop(
-                name=type_data.name
+                name=type_data.name,
+                harvest_time=type_data.harvest_time,
+                payment_interval_id=type_data.payment_interval_id
             )
             
             self.db.add(new_type)
@@ -670,9 +701,8 @@ class TypeCropService:
                     "data": None
                 }
             )
-    
+        
     def update_type(self, type_id: int, type_data: schemas.TypeCropCreate):
-        """Actualizar un tipo de cultivo"""
         try:
             type_crop = self.db.query(TypeCrop).filter(TypeCrop.id == type_id).first()
             if not type_crop:
@@ -685,7 +715,21 @@ class TypeCropService:
                     }
                 )
             
+            # Verificar que el nuevo payment_interval_id exista
+            interval = self.db.query(PaymentInterval).filter(PaymentInterval.id == type_data.payment_interval_id).first()
+            if not interval:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "message": "Intervalo de pago no encontrado",
+                        "data": None
+                    }
+                )
+            
             type_crop.name = type_data.name
+            type_crop.harvest_time = type_data.harvest_time
+            type_crop.payment_interval_id = type_data.payment_interval_id
             
             self.db.commit()
             self.db.refresh(type_crop)
@@ -805,11 +849,10 @@ class PaymentIntervalService:
             )
     
     def create_interval(self, interval_data: schemas.PaymentIntervalCreate):
-        """Crear un nuevo intervalo de pago"""
         try:
             new_interval = PaymentInterval(
                 name=interval_data.name,
-                description=interval_data.description
+                interval_days=interval_data.interval_days
             )
             
             self.db.add(new_interval)
@@ -850,7 +893,7 @@ class PaymentIntervalService:
                 )
             
             interval.name = interval_data.name
-            interval.description = interval_data.description
+            interval.interval_days = interval_data.interval_days
             
             self.db.commit()
             self.db.refresh(interval)

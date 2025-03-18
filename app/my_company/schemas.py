@@ -43,13 +43,13 @@ class CompanyResponse(CompanyBase):
     class Config:
         orm_mode = True
 
-# Esquemas para DigitalCertificate
+
 class DigitalCertificateBase(BaseModel):
     serial_number: int = Field(..., gt=0)
     start_date: date
     expiration_date: date
-    attached: str = Field(..., min_length=1, max_length=255)
-    digital_certificateid: str = Field(..., min_length=1, max_length=45)
+    attached: str = Field("", min_length=0, max_length=255)
+    nit: int = Field(..., gt=0)  
     
     @validator('expiration_date')
     def expiration_date_must_be_after_start_date(cls, v, values):
@@ -66,32 +66,33 @@ class DigitalCertificateResponse(DigitalCertificateBase):
     class Config:
         orm_mode = True
 
-# Esquemas para TypeCrop
+# Para TypeCrop
 class TypeCropBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=60)
+    name: str = Field(..., min_length=1, max_length=128)
+    harvest_time: int = Field(..., gt=0)
+    payment_interval_id: int = Field(..., gt=0)
 
 class TypeCropCreate(TypeCropBase):
     pass
 
 class TypeCropResponse(TypeCropBase):
     id: int
-    
     class Config:
         orm_mode = True
 
-# Esquemas para PaymentInterval
+# Para PaymentInterval
 class PaymentIntervalBase(BaseModel):
-    name: str = Field(..., min_length=1, max_length=60)
-    description: str = Field(..., min_length=1, max_length=255)
+    name: str = Field(..., min_length=1, max_length=128)
+    interval_days: int = Field(..., gt=0)
 
 class PaymentIntervalCreate(PaymentIntervalBase):
     pass
 
 class PaymentIntervalResponse(PaymentIntervalBase):
     id: int
-    
     class Config:
         orm_mode = True
+
 
 # Esquemas para CompanyCertificate
 class CompanyCertificateBase(BaseModel):
