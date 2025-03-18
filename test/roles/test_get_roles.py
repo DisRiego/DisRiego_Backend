@@ -2,8 +2,7 @@ import pytest
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.roles.services import RoleService
-from app.roles.models import Role, Vars
-from sqlalchemy import text
+from app.roles.models import Role
 
 @pytest.fixture(scope="function")
 def db():
@@ -18,49 +17,19 @@ def role_service(db: Session):
     """Instancia del servicio de roles para pruebas"""
     return RoleService(db)
 
-@pytest.fixture()
-def setup_roles(db: Session):
-    """Crear roles de prueba en la base de datos"""
-    # Crear un estado de prueba si no existe
-    status = db.query(Vars).filter_by(name="Activo").first()
-    if not status:
-        status = Vars(name="Activo", type="default")  # Se asigna type para evitar error
-        db.add(status)
-        db.commit()
-        db.refresh(status)
-
-    # Crear roles de prueba
-    role1 = Role(name="Admin", description="Rol de administrador", status=status.id)
-    role2 = Role(name="User", description="Rol de usuario", status=status.id)
-
-    db.add_all([role1, role2])
-    db.commit()
-    db.refresh(role1)
-    db.refresh(role2)
-
-    yield [role1, role2]  # Retorna los roles creados para usarlos en la prueba
-
-    # 🔹 Primero elimina referencias en `user_rol`
-    db.execute(text("DELETE FROM user_rol WHERE rol_id IN (SELECT id FROM rol)"))
-    db.commit()
-
-    # 🔹 Luego elimina referencias en `rol_permission`
-    db.execute(text("DELETE FROM rol_permission WHERE rol_id IN (SELECT id FROM rol)"))
-    db.commit()
-
-    # 🔹 Ahora sí elimina los roles
-    db.query(Role).delete()
-    db.commit()
-
-def test_get_roles(role_service, setup_roles):
+def test_get_roles(role_service, db):
     """✅ Prueba para obtener la lista de roles correctamente"""
+    
+    # 🔹 Obtener roles que ya existen en la base de datos
+    existing_roles = db.query(Role).all()
+    existing_role_names = {role.name for role in existing_roles}
+
     response = role_service.get_roles()
 
     assert response["success"] is True
     assert "data" in response
-    assert len(response["data"]) >= 2  # Al menos los dos que agregamos en la prueba
 
-    # Validar que los roles existen en la respuesta
-    role_names = {role["role_name"] for role in response["data"]}
-    assert "Admin" in role_names
-    assert "User" in role_names
+    # 🔹 Comparar que los roles obtenidos coincidan con los existentes en la BD
+    response_role_names = {role["role_name"] for role in response["data"]}
+
+    assert response_role_names == existing_role_names  # Debe coincidir con lo que hay en la BD

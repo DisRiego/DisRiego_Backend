@@ -90,7 +90,6 @@ class RoleService:
         except SQLAlchemyError:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="Error al crear el rol.")
-
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:

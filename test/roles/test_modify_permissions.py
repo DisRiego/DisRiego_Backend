@@ -33,8 +33,8 @@ def setup_role_with_permissions(db: Session):
     """Crear un rol y permisos de prueba en la base de datos"""
 
     # Crear permisos de prueba
-    perm1 = Permission(name="permiso_lectura", description="Leer datos", category="general")
-    perm2 = Permission(name="permiso_escritura", description="Escribir datos", category="general")
+    perm1 = Permission(name="permiso_lectura_test", description="Leer datos", category="general")
+    perm2 = Permission(name="permiso_escritura_test", description="Escribir datos", category="general")
 
     db.add_all([perm1, perm2])
     db.commit()
@@ -53,9 +53,11 @@ def setup_role_with_permissions(db: Session):
     db.execute(text("DELETE FROM rol_permission WHERE rol_id = :role_id"), {"role_id": role.id})
     db.commit()
 
+    # 🔹 Eliminar solo los permisos creados por la prueba
+    db.query(Permission).filter(Permission.name.in_(["permiso_lectura_test", "permiso_escritura_test"])).delete(synchronize_session=False)
+    db.commit()
+
     db.delete(role)
-    db.delete(perm1)
-    db.delete(perm2)
     db.commit()
 
 
