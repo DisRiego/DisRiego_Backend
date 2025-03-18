@@ -1,8 +1,9 @@
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.roles.services import RoleService
+from app.roles.schemas import RoleCreate
 from app.roles.models import Role, Permission
 import uuid
 
@@ -45,46 +46,45 @@ def role_service(db):
     return RoleService(db[0])  # Pasamos solo la sesión de la base de datos
 
 
-def test_get_roles(role_service, db):
-    """✅ Prueba para obtener la lista de roles correctamente"""
+def test_edit_role_success(role_service, db):
+    """✅ Prueba la edición exitosa de un rol"""
     db_session, created_role_ids, created_permission_ids = db
 
-    # 🔹 Crear un permiso de prueba
-    permission_name = f"Test_Permission_{uuid.uuid4().hex[:8]}"  # Nombre único
-    permission = Permission(name=permission_name, description="Permission for testing", category="General")
+    # 🔹 Crear un permiso de prueba con nombre único
+    permission_name = f"Edit_Permission_{uuid.uuid4().hex[:8]}"
+    permission = Permission(name=permission_name, description="Permission for editing", category="General")
     db_session.add(permission)
     db_session.commit()
     db_session.refresh(permission)
-
-    # Guardamos el ID del permiso creado
     created_permission_ids.append(permission.id)
 
-    # 🔹 Crear un rol de prueba
-    role_name = f"Test_Role_{uuid.uuid4().hex[:8]}"  # Nombre único
-    role = Role(name=role_name, description="Role for testing", status=1)
-    role.permissions.append(permission)  # Asignar el permiso al rol
+    # 🔹 Crear un rol de prueba con nombre único
+    role_name = f"Edit_Role_{uuid.uuid4().hex[:8]}"
+    role = Role(name=role_name, description="Role to edit", status=1)
     db_session.add(role)
     db_session.commit()
     db_session.refresh(role)
-
-    # Guardamos el ID del rol creado
     created_role_ids.append(role.id)
 
-    # 🔹 Ejecutar la función `get_roles()`
-    response = role_service.get_roles()
+    # 🔹 Editar el rol
+    updated_role_data = RoleCreate(name=role.name, description="Updated description", permissions=[permission.id])
+    response = role_service.edit_rol(role.id, updated_role_data)
 
+    # ✅ Cambiar la forma de acceder a la descripción
     assert response["success"] is True
-    assert "data" in response
+    assert response["message"] == "Rol editado correctamente"
+    assert response["data"].description == "Updated description"  # Acceder directamente al atributo del objeto `Role`
+    
+    # 🔹 Verificar en la base de datos que el rol ha sido actualizado correctamente
+    updated_role = db_session.query(Role).filter_by(id=role.id).first()
+    assert updated_role is not None
+    assert updated_role.description == "Updated description"
 
-    # 🔹 Buscar el rol creado en la respuesta de la API
-    roles_data = response["data"]
-    created_role_data = next((r for r in roles_data if r["role_name"] == role_name), None)
 
-    assert created_role_data is not None, "El rol de prueba no se encontró en la respuesta de la API"
-    assert created_role_data["role_description"] == "Role for testing"
-    assert created_role_data["status_name"] is not None  # Se asegura que el status se devuelve correctamente
-
-    # 🔹 Verificar los permisos del rol en la API
-    permission_data = created_role_data["permissions"]
-    assert len(permission_data) == 1
-    assert permission_data[0]["name"] == permission_name
+def test_edit_role_not_found(role_service):
+    """❌ Prueba que no se pueda editar un rol inexistente"""
+    updated_role_data = RoleCreate(name="Inexistente", description="No existe", permissions=[1])
+    with pytest.raises(HTTPException) as excinfo:
+        role_service.edit_rol(9999, updated_role_data)
+    assert excinfo.value.status_code == 404
+    assert "El rol no existe" in str(excinfo.value.detail)
