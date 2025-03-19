@@ -51,23 +51,25 @@ class CompanyService:
     
 
     
-    async def create_company_info(self, company_data, logo_file):
-        """Crear o actualizar la información de la empresa"""
+    async def create_company_info(self, company_data, logo_file, digital_certificate_id: int):
         try:
-            # Guardar el logo si se proporcionó
+            # Guardar el logo y actualizar company_data.logo
             if logo_file:
                 logo_path = await self.save_file(logo_file, "uploads/logos/")
                 company_data.logo = logo_path
             else:
-                company_data.logo = ""  # O lanzar error si es obligatorio
-
-            # Verificar si ya existe info de empresa
+                company_data.logo = ""
+            
+            # Verificar si el certificado digital seleccionado está activo
+            certificate = self.db.query(DigitalCertificate).filter(DigitalCertificate.id == digital_certificate_id).first()
+            if not certificate or certificate.has_expired():
+                raise HTTPException(status_code=400, detail="El certificado digital seleccionado no está activo")
+            
+            # Verificar si ya existe información de la empresa
             existing_company = self.db.query(Company).first()
             
-            # Se asume que se mantiene la verificación de la existencia de la paleta a través de color_palette_id
-            
             if existing_company:
-                # Actualizar la empresa existente
+                # Actualizar los datos de la empresa existente
                 existing_company.name = company_data.name
                 existing_company.nit = company_data.nit
                 existing_company.email = company_data.email
@@ -78,9 +80,20 @@ class CompanyService:
                 existing_company.address = company_data.address
                 existing_company.logo = company_data.logo
                 existing_company.color_palette_id = company_data.color_palette_id
-                
                 self.db.commit()
                 self.db.refresh(existing_company)
+                
+                # Actualizar o crear la relación del certificado digital
+                company_cert = self.db.query(CompanyCertificate).filter(CompanyCertificate.company_id == existing_company.id).first()
+                if company_cert:
+                    company_cert.digital_certificate_id = digital_certificate_id
+                else:
+                    new_company_cert = CompanyCertificate(
+                        company_id=existing_company.id,
+                        digital_certificate_id=digital_certificate_id
+                    )
+                    self.db.add(new_company_cert)
+                self.db.commit()
                 
                 return JSONResponse(
                     status_code=200,
@@ -91,7 +104,7 @@ class CompanyService:
                     }
                 )
             else:
-                # Crear nueva entrada de empresa
+                # Crear nueva empresa
                 new_company = Company(
                     name=company_data.name,
                     nit=company_data.nit,
@@ -104,10 +117,17 @@ class CompanyService:
                     logo=company_data.logo,
                     color_palette_id=company_data.color_palette_id
                 )
-                
                 self.db.add(new_company)
                 self.db.commit()
                 self.db.refresh(new_company)
+                
+                # Crear la relación con el certificado digital
+                new_company_cert = CompanyCertificate(
+                    company_id=new_company.id,
+                    digital_certificate_id=digital_certificate_id
+                )
+                self.db.add(new_company_cert)
+                self.db.commit()
                 
                 return JSONResponse(
                     status_code=201,
@@ -137,6 +157,85 @@ class CompanyService:
                     "data": None
                 }
             )
+
+    async def update_basic_info(self, name: str, nit: int, digital_certificate_id: int, logo_file: UploadFile = None):
+        # Obtener o crear la empresa
+        company = self.db.query(Company).first()
+        if not company:
+            company = Company()
+            self.db.add(company)
+            self.db.commit()
+            self.db.refresh(company)
+        
+        # Actualizar campos básicos
+        company.name = name
+        company.nit = nit
+
+        # Guardar el logo si se proporcionó
+        if logo_file:
+            logo_path = await self.save_file(logo_file, "uploads/logos/")
+            company.logo = logo_path
+
+        # Verificar que el certificado digital exista y esté activo
+        certificate = self.db.query(DigitalCertificate).filter(DigitalCertificate.id == digital_certificate_id).first()
+        if not certificate or certificate.has_expired():
+            raise HTTPException(status_code=400, detail="El certificado digital seleccionado no está activo")
+
+        self.db.commit()
+        self.db.refresh(company)
+        
+        # Actualizar o crear la relación en CompanyCertificate
+        company_cert = self.db.query(CompanyCertificate).filter(CompanyCertificate.company_id == company.id).first()
+        if company_cert:
+            company_cert.digital_certificate_id = digital_certificate_id
+        else:
+            new_company_cert = CompanyCertificate(
+                company_id=company.id,
+                digital_certificate_id=digital_certificate_id
+            )
+            self.db.add(new_company_cert)
+        self.db.commit()
+        
+        return {
+            "success": True,
+            "message": "Información básica actualizada correctamente",
+            "data": company.name  # O la representación completa que desees retornar
+        }
+
+    async def update_contact_info(self, email: str, phone: str):
+        company = self.db.query(Company).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="No existe información de empresa registrada")
+        
+        company.email = email
+        company.phone = phone
+        self.db.commit()
+        self.db.refresh(company)
+        
+        return {
+            "success": True,
+            "message": "Información de contacto actualizada correctamente",
+            "data": company.email
+        }
+
+    async def update_location_info(self, country: str, state: str, city: str, address: str):
+        company = self.db.query(Company).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="No existe información de empresa registrada")
+        
+        company.country = country
+        company.state = state
+        company.city = city
+        company.address = address
+        self.db.commit()
+        self.db.refresh(company)
+        
+        return {
+            "success": True,
+            "message": "Información de ubicación actualizada correctamente",
+            "data": company.country
+        }
+
 
     
     async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
