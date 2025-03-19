@@ -22,24 +22,29 @@ async def get_company_info(
 
 @router.post("/company", summary="Crear o actualizar información de la empresa")
 async def create_update_company_info(
+    # Sección de Información Básica
     name: str = Form(...),
     nit: int = Form(...),
+    digital_certificate_id: int = Form(...),  
+    logo: UploadFile = File(...),
+    # Sección de Información de Contacto
     email: str = Form(...),
     phone: str = Form(...),
+    # Sección de Ubicación
     country: str = Form(...),
     state: str = Form(...),
     city: str = Form(...),
     address: str = Form(...),
     color_palette_id: int = Form(...),
-    logo: UploadFile = File(...),  
     db: Session = Depends(get_db)
 ):
     """
-    Crea o actualiza la información de la empresa.
-    
-    - Si no existe información previa, se crea un nuevo registro.
-    - Si ya existe, se actualiza el registro existente.
+    Crea o actualiza la información de la empresa, dividiendo el formulario en:
+    - Información básica: nombre, NIT, certificado digital activo y logo.
+    - Información de contacto: correo y teléfono.
+    - Ubicación: país, departamento, ciudad y dirección.
     """
+    
     company_data = schemas.CompanyBase(
         name=name,
         nit=nit,
@@ -49,13 +54,47 @@ async def create_update_company_info(
         state=state,
         city=city,
         address=address,
-        logo="",  
+        logo="", 
         color_palette_id=color_palette_id
     )
     
     company_service = services.CompanyService(db)
-    return await company_service.create_company_info(company_data, logo)
+   
+    return await company_service.create_company_info(company_data, logo, digital_certificate_id)
 
+# Endpoint para información básica: nombre, NIT, certificado digital y logo
+@router.patch("/company/basic", summary="Actualizar información básica de la empresa")
+async def update_company_basic(
+    name: str = Form(...),
+    nit: int = Form(...),
+    digital_certificate_id: int = Form(...),
+    logo: UploadFile = File(None),  # Puede ser opcional en actualización
+    db: Session = Depends(get_db)
+):
+    company_service = services.CompanyService(db)
+    return await company_service.update_basic_info(name, nit, digital_certificate_id, logo)
+
+# Endpoint para información de contacto: correo y teléfono
+@router.patch("/company/contact", summary="Actualizar información de contacto de la empresa")
+async def update_company_contact(
+    email: str = Form(...),
+    phone: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    company_service = services.CompanyService(db)
+    return await company_service.update_contact_info(email, phone)
+
+# Endpoint para información de ubicación: país, departamento, ciudad y dirección
+@router.patch("/company/location", summary="Actualizar información de ubicación de la empresa")
+async def update_company_location(
+    country: str = Form(...),
+    state: str = Form(...),
+    city: str = Form(...),
+    address: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    company_service = services.CompanyService(db)
+    return await company_service.update_location_info(country, state, city, address)
 
 # Rutas para paletas de colores
 @router.get("/color-palettes", summary="Listar todas las paletas de colores")
