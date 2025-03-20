@@ -7,6 +7,7 @@ from app.property_routes.models import Property, Lot, PropertyLot, PropertyUser
 from sqlalchemy.orm import Session
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
 from app.users.models import User
+from datetime import date
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -179,6 +180,53 @@ class PropertyLotService:
             return file_path  # Devolver la ruta del archivo guardado
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+
+    async def edit_lot_fields(self, lot_id: int, payment_interval: int, type_crop_id: int, planting_date: date, estimated_harvest_date: date):
+        try:
+            lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
+            if not lot:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de lote",
+                            "message": "El lote no existe en el sistema"
+                        }
+                    }
+                )
+
+            # Actualizar únicamente los campos editables
+            lot.payment_interval = payment_interval
+            lot.type_crop_id = type_crop_id
+            lot.planting_date = planting_date
+            lot.estimated_harvest_date = estimated_harvest_date
+
+            self.db.commit()
+            self.db.refresh(lot)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": {
+                        "title": "Edición de lote",
+                        "message": "Los campos del lote han sido actualizados satisfactoriamente"
+                    }
+                }
+            )
+        except Exception as e:
+            self.db.rollback()
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Edición de lote",
+                        "message": f"Error al editar el lote, Contacta al administrador: {str(e)}"
+                    }
+                }
+            )
 
     async def create_lot(self, property_id: int, name: str, longitude: float, latitude: float, extension: float, real_estate_registration_number: int,public_deed: UploadFile = File(...), freedom_tradition_certificate: UploadFile = File(...)):
         """Crear un nuevo predio en la base de datos con la carga de archivos"""

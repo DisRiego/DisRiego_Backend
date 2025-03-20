@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text , Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
 
@@ -34,9 +34,16 @@ class Lot(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
+    
+    # Nuevos campos
+    payment_interval = Column(Integer, nullable=True)
+    type_crop_id = Column(Integer, ForeignKey('type_crop.id'), nullable=True)
+    planting_date = Column(Date, nullable=True)
+    estimated_harvest_date = Column(Date, nullable=True)
+    state = Column("State", Boolean, nullable=True)
 
-    # Relación con las propiedades (relación muchos a muchos)
-    # properties = relationship("Property", secondary="property_lot", back_populates="lots")
+    # Relación con TypeCrop
+    type_crop = relationship("TypeCrop", back_populates="lots")
 
     def __repr__(self):
         return f"<Lot(id={self.id}, name={self.name})>"
