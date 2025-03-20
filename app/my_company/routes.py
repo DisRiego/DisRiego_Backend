@@ -68,7 +68,6 @@ async def update_company_basic(
     name: str = Form(...),
     nit: int = Form(...),
     digital_certificate_id: int = Form(...),
-    logo: UploadFile = File(None),  # Puede ser opcional en actualización
     db: Session = Depends(get_db)
 ):
     company_service = services.CompanyService(db)
