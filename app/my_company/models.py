@@ -84,6 +84,7 @@ class TypeCrop(Base):
     
     # Relación con PaymentInterval
     payment_interval = relationship("PaymentInterval")
+    lots = relationship("Lot", back_populates="type_crop")
     
     def __repr__(self):
         return f"<TypeCrop(id={self.id}, name={self.name})>"

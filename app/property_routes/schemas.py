@@ -32,3 +32,12 @@ class PropertyResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+class LotEditFields(BaseModel):
+    payment_interval: Optional[int] = Field(None, description="Intervalo de pago en número entero")
+    type_crop_id: Optional[int] = Field(None, description="ID del tipo de cultivo")
+    planting_date: Optional[date] = Field(None, description="Fecha de siembra (YYYY-MM-DD)")
+    estimated_harvest_date: Optional[date] = Field(None, description="Fecha estimada de cosecha (YYYY-MM-DD)")
+
+    class Config:
+        orm_mode = True

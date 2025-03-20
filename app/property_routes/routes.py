@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.property_routes.services import PropertyLotService
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
+from datetime import datetime
+
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -151,4 +153,40 @@ async def update_lot(property_id: int,
         real_estate_registration_number = real_estate_registration_number,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
+    )
+
+
+
+
+@router.put("/lot/{lot_id}/edit-fields", response_model=dict)
+async def update_lot_fields(
+    lot_id: int,
+    payment_interval: int = Form(...),
+    type_crop_id: int = Form(...),
+    planting_date: str = Form(...),  # Recibido como 'YYYY-MM-DD'
+    estimated_harvest_date: str = Form(...),  # Recibido como 'YYYY-MM-DD'
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para editar los campos:
+    - payment_interval
+    - type_crop_id
+    - planting_date
+    - estimated_harvest_date
+
+    El campo 'state' permanece inalterable.
+    """
+    try:
+        planting_date_obj = datetime.strptime(planting_date, "%Y-%m-%d").date()
+        estimated_harvest_date_obj = datetime.strptime(estimated_harvest_date, "%Y-%m-%d").date()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
+
+    property_service = PropertyLotService(db)
+    return await property_service.edit_lot_fields(
+        lot_id=lot_id,
+        payment_interval=payment_interval,
+        type_crop_id=type_crop_id,
+        planting_date=planting_date_obj,
+        estimated_harvest_date=estimated_harvest_date_obj
     )
