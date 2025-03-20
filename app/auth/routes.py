@@ -50,9 +50,9 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         "id": user.id,
         "name": user.name,
         "email": user.email,
-        "status_date": str(datetime.utcnow()),
+        "status_date": datetime.utcnow().isoformat(),
         "rol": roles,
-        "birthday": user.birthday,
+        "birthday": user.birthday.isoformat(),
         "first_login_complete": user.first_login_complete
     }
     

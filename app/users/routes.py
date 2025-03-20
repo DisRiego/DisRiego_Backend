@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, List
 from datetime import datetime
+from app.roles.models import Role
 from app.database import get_db
 from app.users import schemas
 from app.users.models import ChangeUserStatusRequest
@@ -262,7 +263,8 @@ def admin_edit_user(
             email=None  # Actualizar email según la lógica de negocio, si es necesario
         )
         if update_data.roles:
-            result = user_service.update_user(user_id, roles=update_data.roles)
+            roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
+            result = user_service.update_user(user_id, roles=roles_obj)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
