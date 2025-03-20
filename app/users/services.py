@@ -93,18 +93,7 @@ class UserService:
                     }
                 )
                 
-            # Validar que el municipio esté en el rango correcto
-            if city < 1 or city > 37:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "data": {
-                            "title": "Error en registro",
-                            "message": "El codigo de municipio debe estar entre 1 y 37"
-                        }
-                    }
-                )
+
                 
             # Actualizar los datos del usuario
             user.country = country
