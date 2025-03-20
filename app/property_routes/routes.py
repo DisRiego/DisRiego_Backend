@@ -99,6 +99,18 @@ def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
     
+@router.get("/user/{user_id}")
+def list_lots_properties(user_id: int, db: Session = Depends(get_db)):
+    """Obtener todos los predios de un usuario"""
+    try:
+        property_service = PropertyLotService(db)
+        properties = property_service.get_properties_for_user(user_id)
+        return properties
+    except HTTPException as e:
+        raise e  # Re-raise HTTPException for known errors
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
+    
 @router.put("/lot/{lot_id}", response_model=dict)
 async def update_lot(lot_id: int,
     name: str = Form(...),
