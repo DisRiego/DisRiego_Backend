@@ -264,11 +264,8 @@ def admin_edit_user(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
 
-@router.get("/admin/type-documents", tags=["Admin"])
-def get_document_types(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(AuthService.get_current_user)
-):
+@router.get("/type-documents", tags=["Users"])
+def get_document_types(db: Session = Depends(get_db)):
     """
     Obtiene todos los tipos de documentos disponibles.
     """
@@ -278,11 +275,9 @@ def get_document_types(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los tipos de documentos: {str(e)}")
 
-@router.get("/admin/genders", tags=["Admin"])
-def get_genders(
-    db: Session = Depends(get_db),
-    current_user: dict = Depends(AuthService.get_current_user)
-):
+
+@router.get("/genders" , tags=["Users"])
+def get_genders(db: Session = Depends(get_db)):
     """
     Obtiene todos los géneros disponibles.
     """
