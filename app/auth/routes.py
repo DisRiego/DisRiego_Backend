@@ -11,8 +11,55 @@ from app.users.services import UserService
 from app.roles.models import Role, Permission 
 from app.users.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/swagger-login")
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+
+@router.post("/swagger-login", response_model=Token)
+def swagger_login(
+    form_data: OAuth2PasswordRequestForm = Depends(), 
+    db: Session = Depends(get_db)
+):
+    auth_service = AuthService(db)
+    
+    user = auth_service.authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
+    
+    # Recargar el usuario con relaciones
+    user = (
+        db.query(User)
+        .options(joinedload(User.roles).joinedload(Role.permissions))
+        .filter(User.email == user.email)
+        .first()
+    )
+    
+    if not user.first_login_complete:
+        raise HTTPException(
+            status_code=403,
+            detail="Debe completar el primer registro. Redirija a /first-login-register."
+        )
+    
+    roles = []
+    for role in user.roles:
+        role_data = {"id": role.id, "name": role.name}
+        permisos = [{"id": perm.id, "name": perm.name} for perm in role.permissions]
+        role_data["permisos"] = permisos
+        roles.append(role_data)
+    
+    token_data = {
+        "sub": user.email,   
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "status_date": datetime.utcnow().isoformat(),
+        "rol": roles,
+        "birthday": user.birthday.isoformat() if user.birthday else None,
+        "first_login_complete": user.first_login_complete
+    }
+    
+    access_token = auth_service.create_access_token(data=token_data)
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login/", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
