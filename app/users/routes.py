@@ -260,7 +260,7 @@ def admin_edit_user(
             date_issuance_document=update_data.date_issuance_document,
             birthday=update_data.birthday,
             gender_id=update_data.gender_id,
-            email=None  # Actualizar email según la lógica de negocio, si es necesario
+            
         )
         if update_data.roles:
             roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()

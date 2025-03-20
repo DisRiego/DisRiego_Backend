@@ -279,6 +279,7 @@ class UserService:
                     User.document_number,  # Campo corregido
                     User.date_issuance_document,
                     User.type_document_id,
+                    User.birthday,
                     TypeDocument.name.label("type_document_name"),
                     User.status_id,
                     Status.name.label("status_name"),
