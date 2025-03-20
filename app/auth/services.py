@@ -1,18 +1,14 @@
-from fastapi import Depends, HTTPException, status
+from typing import Dict
+from fastapi import Depends, HTTPException, requests, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
 from datetime import datetime, timedelta
-from app.users.models import User, RevokedToken
+from app.auth.schemas import OAuthUserInfo, SocialLoginResponse
+from app.users.models import SocialAccount, User, RevokedToken
 from sqlalchemy.orm import Session, joinedload
 from app.roles.models import Role, Permission
 from Crypto.Protocol.KDF import scrypt
 import os
-import json
-import requests
-from typing import Dict, Any, Optional
-from app.auth.schemas import OAuthUserInfo, SocialLoginResponse
-from app.users.models import SocialAccount
-
 
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
@@ -155,37 +151,6 @@ def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
             detail="Credenciales inválidas",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-def admin_required(current_user: dict):
-    """
-    Verifica si el usuario actual tiene permisos de administrador.
-    Si no los tiene, lanza una excepción 403 Forbidden.
-    """
-    has_admin_permission = False
-    
-    # Verificar si el usuario tiene el rol o permiso de administrador
-    if "rol" in current_user:
-        roles = current_user["rol"]
-        
-        for role in roles:
-            # Verificar si el usuario tiene un rol de administrador
-            if role.get("name", "").lower() == "administrador":
-                has_admin_permission = True
-                break
-                
-            # Verificar si alguno de los roles tiene el permiso de administrador
-            permisos = role.get("permisos", [])
-            if any(perm.get("name") == "admin_usuarios" for perm in permisos):
-                has_admin_permission = True
-                break
-    
-    if not has_admin_permission:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permisos para realizar esta acción. Se requieren permisos de administrador."
-        )
-        
-    return current_user
 
 class OAuthService:
     """Servicio para gestionar la autenticación con proveedores OAuth"""

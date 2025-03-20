@@ -522,3 +522,38 @@ class PropertyLotService:
                     }
                 }
             )
+        
+    def get_properties_for_user(self, user_id: int):
+        """Obtener todos los predios de un usuario"""
+        try:
+            # Realizar la consulta para obtener todos los predios de un lote
+            properties = self.db.query(Property).join(PropertyUser, PropertyUser.property_id == Property.id).filter(PropertyUser.user_id == user_id).all()
+            
+            if not properties:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "data": jsonable_encoder([])
+                    }
+                )
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": jsonable_encoder(properties)
+                }
+            )
+
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "title": "Error al obtener los lotes del predio",
+                        "message": f"Error al obtener los lotes, Contacta al administrador: {str(e)}"
+                    }
+                }
+            )

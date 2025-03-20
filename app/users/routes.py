@@ -5,8 +5,8 @@ from app.database import get_db
 from app.users import schemas
 from app.users.models import ChangeUserStatusRequest
 from app.users.services import UserService
-from app.auth.services import admin_required, get_current_user
-from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateRequest, AdminUserCreateResponse, PreRegisterValidationRequest, PreRegisterCompleteRequest, PreRegisterResponse, ActivateAccountRequest, ActivateAccountResponse
+from app.auth.services import get_current_user
+from app.users.schemas import ActivateAccountResponse, PreRegisterCompleteRequest, PreRegisterResponse, PreRegisterValidationRequest, UpdateUserRequest, UserResponse, UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateRequest, AdminUserCreateResponse
 from typing import Optional, List
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -174,24 +174,7 @@ def edit_user(
     Edita ciertos campos del usuario:
       - name, first_last_name, second_last_name,
       - type_document_id, document_number y date_issuance_document.
-    
-    Se permite solo si el usuario actual (extraído del token) tiene el permiso "editar_usuario".
     """
-    required_permission = "editar_usuario"
-
-    roles = current_user.get("rol", [])
-    
-    all_permissions = []
-    for role in roles:
-        permisos = role.get("permisos", [])
-        all_permissions.extend(permisos)
-    
-    if not any(perm.get("name") == required_permission for perm in all_permissions):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para editar usuarios."
-        )
-    
     user_service = UserService(db)
     result = user_service.update_user(
         user_id,
@@ -284,7 +267,6 @@ def create_user_by_admin(
 ):
     """
     Crea un nuevo usuario en el sistema.
-    Solo accesible por administradores.
     
     Los campos requeridos son:
     - name: Nombres
@@ -297,9 +279,6 @@ def create_user_by_admin(
     - gender_id: Género
     - roles: Lista de roles asignados
     """
-    # Verificar si el usuario actual tiene permisos de administrador
-    admin_required(current_user)
-    
     try:
         user_service = UserService(db)
         result = user_service.create_user_by_admin(
@@ -328,9 +307,6 @@ def get_document_types(
     current_user: dict = Depends(get_current_user)
 ):
     """Obtener todos los tipos de documentos disponibles"""
-    # Verificar si el usuario actual tiene permisos de administrador
-    admin_required(current_user)
-    
     try:
         user_service = UserService(db)
         return user_service.get_type_documents()
@@ -346,9 +322,6 @@ def get_genders(
     current_user: dict = Depends(get_current_user)
 ):
     """Obtener todos los géneros disponibles"""
-    # Verificar si el usuario actual tiene permisos de administrador
-    admin_required(current_user)
-    
     try:
         user_service = UserService(db)
         return user_service.get_genders()

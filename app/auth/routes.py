@@ -23,18 +23,12 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """
     auth_service = AuthService(db)
     
-    # Autenticar usuario
+    
     user = auth_service.authenticate_user(user_credentials.email, user_credentials.password)
     if not user:
-        raise HTTPException(
-            status_code=401, 
-            detail={
-                "success": False,
-                "data": "Credenciales inválidas. Verifica tu correo y contraseña."
-            }
-        )
+        raise HTTPException(status_code=401, detail="Credenciales inválidas")
     
-    # Obtener usuario con roles y permisos
+    
     user = (
         db.query(User)
         .options(joinedload(User.roles).joinedload(Role.permissions))
@@ -42,17 +36,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         .first()
     )
     
-    # Verificar si la cuenta está activa
-    if user.status_id != 1:  # Asumiendo que 1 es "Activo"
-        raise HTTPException(
-            status_code=401, 
-            detail={
-                "success": False,
-                "data": "Esta cuenta no está activa. Por favor, contacta al administrador."
-            }
-        )
-    
-    # Construir datos de roles para el token
+   
     roles = []
     for role in user.roles:
         role_data = {"id": role.id, "name": role.name}
@@ -60,7 +44,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         role_data["permisos"] = permisos  # Si no hay permisos, será una lista vacía
         roles.append(role_data)
     
-    # Construir payload del token
+   
     token_data = {
         "sub": user.email,   
         "id": user.id,
@@ -70,9 +54,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         "rol": roles
     }
     
-    # Generar token de acceso
     access_token = auth_service.create_access_token(data=token_data)
-    
     return {"access_token": access_token, "token_type": "bearer"}
 
 
