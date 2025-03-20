@@ -34,11 +34,7 @@ def swagger_login(
         .first()
     )
     
-    if not user.first_login_complete:
-        raise HTTPException(
-            status_code=403,
-            detail="Debe completar el primer registro. Redirija a /first-login-register."
-        )
+
     
     roles = []
     for role in user.roles:
@@ -77,12 +73,6 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         .first()
     )
     
-    # Si el usuario no ha completado su primer login, indicar al cliente
-    if not user.first_login_complete:
-        raise HTTPException(
-            status_code=403,
-            detail="Debe completar el primer registro. Redirija a /first-login-register."
-        )
     
     roles = []
     for role in user.roles:
