@@ -763,91 +763,85 @@ class UserService:
                 )
             
 
-    async def update_basic_profile(self, user_id: int, country: str = None, 
-                                department: str = None, city: int = None,
-                                address: str = None, phone: str = None,
-                                profile_picture: str = None) -> dict:
-            """
-            Actualiza solo la informacion basica del perfil de un usuario.
-            
-            Args:
-                user_id: ID del usuario
-                country: Pais (opcional)
-                department: Departamento (opcional)
-                city: Codigo de municipio (opcional)
-                address: Direccion (opcional)
-                phone: Teléfono (opcional)
-                profile_picture: Ruta a la imagen de perfil (opcional)
-                
-            Returns:
-                Diccionario con el resultado de la operacion
-            """
-            try:
-                # Verificar que el usuario existe
-                user = self.db.query(User).filter(User.id == user_id).first()
-                if not user:
-                    return JSONResponse(
-                        status_code=404,
-                        content={
-                            "success": False,
-                            "data": {
-                                "title": "Error en actualizacion",
-                                "message": "Usuario no encontrado"
-                            }
-                        }
-                    )
-                    
-                # Actualizar solo los campos proporcionados
-                if country is not None:
-                    user.country = country
-                    
-                if department is not None:
-                    user.department = department
-                    
-                if city is not None:
-                    # Validar el rango del municipio
-                    if city < 1 or city > 37:
-                        return JSONResponse(
-                            status_code=400,
-                            content={
-                                "success": False,
-                                "data": {
-                                    "title": "Error en actualizacion",
-                                    "message": "El codigo de municipio debe estar entre 1 y 37"
-                                }
-                            }
-                        )
-                    user.city = city
-                    
-                if address is not None:
-                    user.address = address
-                    
-                if phone is not None:
-                    user.phone = phone
-                    
-                if profile_picture is not None:
-                    user.profile_picture = profile_picture
-                    
-                # Guardar los cambios
-                self.db.commit()
-                self.db.refresh(user)
-                
+    async def update_basic_profile(
+        self,
+        user_id: int,
+        country: Optional[int] = None,
+        department: Optional[int] = None,
+        city: Optional[int] = None,
+        address: Optional[str] = None,
+        phone: Optional[str] = None,
+        profile_picture: Optional[str] = None
+    ) -> dict:
+        """
+        Actualiza solo la información básica del perfil de un usuario.
+
+        Args:
+            user_id: ID del usuario
+            country: País (opcional)
+            department: Departamento (opcional)
+            city: Código de municipio (opcional)
+            address: Dirección (opcional)
+            phone: Teléfono (opcional)
+            profile_picture: Ruta a la imagen de perfil (opcional)
+
+        Returns:
+            Diccionario con el resultado de la operación
+        """
+        try:
+            # Verificar que el usuario existe
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
                 return JSONResponse(
-                    status_code=200,
+                    status_code=404,
                     content={
-                        "success": True,
+                        "success": False,
                         "data": {
-                            "title": "Perfil actualizado",
-                            "message": "Informacion del perfil actualizada correctamente"
+                            "title": "Error en actualización",
+                            "message": "Usuario no encontrado"
                         }
                     }
                 )
-            except Exception as e:
-                self.db.rollback()
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error al actualizar el perfil: {str(e)}"
-                )
+
+            # Actualizar solo los campos proporcionados
+            if country is not None:
+                user.country = country
+            if department is not None:
+                user.department = department
+            if city is not None:
+                # Se asume que ya se validó el rango en el router
+                user.city = city
+            if address is not None:
+                user.address = address
+            if phone is not None:
+                user.phone = phone
+            if profile_picture is not None:
+                user.profile_picture = profile_picture
+
+       
+
+
+            # Guardar los cambios
+            self.db.commit()
+            self.db.refresh(user)
+
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": {
+                        "title": "Perfil actualizado",
+                        "message": "Información del perfil actualizada correctamente"
+                    }
+                }
+            )
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al actualizar el perfil: {str(e)}"
+            )
             
     def create_user_by_admin(self, name: str, first_last_name: str, second_last_name: str, 
                                 type_document_id: int, document_number: str, date_issuance_document: datetime,

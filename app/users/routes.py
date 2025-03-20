@@ -143,11 +143,7 @@ def check_profile_completion(user_id: int, db: Session = Depends(get_db)):
 @router.put("/edit-profile/{user_id}", response_model=dict)
 async def edit_profile(
     user_id: int,
-    country: Optional[str] = Form(None),
-    department: Optional[str] = Form(None),
-    city: Optional[int] = Form(None),
-    address: Optional[str] = Form(None),
-    phone: Optional[str] = Form(None),
+    update_data: UserEditRequest,  # Recibe un JSON que cumpla con este modelo
     db: Session = Depends(get_db),
     current_user: dict = Depends(AuthService.get_current_user)
 ):
@@ -158,15 +154,14 @@ async def edit_profile(
         raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
     try:
         user_service = UserService(db)
-        if city is not None and (city < 1 or city > 37):
-            raise HTTPException(status_code=400, detail="El código de ciudad debe estar entre 1 y 37")
         result = await user_service.update_basic_profile(
             user_id=user_id,
-            country=country,
-            department=department,
-            city=city,
-            address=address,
-            phone=phone
+            country=update_data.country,
+            department=update_data.department,
+            city=update_data.city,
+            address=update_data.address,
+            phone=update_data.phone,
+            profile_picture=update_data.profile_picture
         )
         return result
     except HTTPException as e:
