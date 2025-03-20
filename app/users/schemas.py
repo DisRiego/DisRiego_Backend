@@ -26,21 +26,18 @@ class AdminUserCreateRequest(BaseModel):
     
     @validator('document_number')
     def validate_document_number(cls, v):
-        """Validar que el número de documento contenga solo números"""
         if not v.isdigit():
             raise ValueError("El número de documento debe contener solo dígitos")
         return v
     
     @validator('birthday')
     def validate_birthday(cls, v):
-        """Validar que la fecha de nacimiento no sea en el futuro"""
         if v > date.today():
             raise ValueError("La fecha de nacimiento no puede ser en el futuro")
         return v
     
     @validator('date_issuance_document')
     def validate_issuance_date(cls, v, values):
-        """Validar que la fecha de expedición no sea en el futuro y posterior al nacimiento"""
         if v > date.today():
             raise ValueError("La fecha de expedición no puede ser en el futuro")
         if 'birthday' in values and v < values['birthday']:
@@ -56,9 +53,9 @@ class AdminUserCreateResponse(BaseModel):
 # Modelo base para la solicitud de usuario
 class UserBase(BaseModel):
     username: str
-    password: str  # Incluye password en el modelo de solicitud
+    password: str
 
-# Modelo de respuesta, que incluye el campo `id` (y otros campos que desees)
+# Modelo de respuesta que incluye el campo `id` y demás datos
 class UserResponse(UserBase):
     id: int
     email_status: Optional[bool] = None
@@ -78,12 +75,12 @@ class UserResponse(UserBase):
     email: Optional[str] = None
     country: Optional[str] = None
     department: Optional[str] = None
-    municipality: Optional[int] = None
+    city: Optional[int] = None
 
     class Config:
         from_attributes = True  
 
-# Modelo de token para la autenticación
+# Modelo de token para autenticación
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -93,17 +90,17 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-# Actualizado: Modelo para registro de usuario después del primer login
+# Modelo para registro de usuario después del primer login
 class FirstLoginProfileUpdate(BaseModel):
     user_id: int
-    country: str = Field(..., description="Pais de residencia")
+    country: str = Field(..., description="País de residencia")
     department: str = Field(..., description="Departamento o provincia")
-    municipality: int = Field(..., ge=1, le=37, description="Codigo del municipio (1-37)")
-    address: str = Field(..., description="Direccion completa")
-    phone: str = Field(..., description="Numero de telefono")
+    city: int = Field(..., ge=1, le=37, description="Código del municipio (1-37)")
+    address: str = Field(..., description="Dirección completa")
+    phone: str = Field(..., description="Número de teléfono")
     profile_picture: Optional[str] = None
 
-# Existente: Actualización general de usuario
+# Actualización general de usuario (para autogestión)
 class UpdateUserRequest(BaseModel):
     user_id: int
     new_address: Optional[str] = None
@@ -111,7 +108,7 @@ class UpdateUserRequest(BaseModel):
     new_phone: Optional[str] = None
     country: Optional[str] = None
     department: Optional[str] = None
-    municipality: Optional[int] = Field(None, ge=1, le=37, description="Codigo del municipio (1-37)")
+    city: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
 
 class ChangePasswordRequest(BaseModel):
     old_password: str = Field(..., min_length=12, description="Contraseña actual del usuario")
@@ -152,23 +149,22 @@ class UserCreateRequest(BaseModel):
 class UserUpdateInfo(BaseModel):
     country: Optional[str] = Field(None, description="País de residencia")
     department: Optional[str] = Field(None, description="Departamento o provincia")
-    municipality: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
+    city: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
     address: Optional[str] = Field(None, description="Dirección completa")
     phone: Optional[str] = Field(None, description="Número de teléfono")
     profile_picture: Optional[str] = None
 
-# Esquema simplificado para la edición de usuario
+# Esquema para edición de perfil básico (usuario normal)
 class UserEditRequest(BaseModel):
     """
     Esquema para la edición de información básica del usuario.
-    Restringe los campos que se pueden editar a país, departamento, 
-    municipio, dirección y teléfono.
+    Permite modificar solo país, departamento, municipio, dirección y teléfono.
     """
     country: Optional[str] = Field(None, description="País de residencia")
     department: Optional[str] = Field(None, description="Departamento o provincia")
-    municipality: Optional[int] = Field(None, ge=1, le=37, description="Codigo del municipio (1-37)")
-    address: Optional[str] = Field(None, description="Direccion completa")
-    phone: Optional[str] = Field(None, description="Numero de telefono")
+    city: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
+    address: Optional[str] = Field(None, description="Dirección completa")
+    phone: Optional[str] = Field(None, description="Número de teléfono")
     profile_picture: Optional[str] = None
 
 class PreRegisterValidationRequest(BaseModel):
@@ -187,12 +183,11 @@ class PreRegisterCompleteRequest(BaseModel):
     """Solicitud para completar el pre-registro con email y contraseña"""
     token: str = Field(..., description="Token de validación")
     email: EmailStr = Field(..., description="Correo electrónico")
-    password: str = Field(..., min_length=8, max_length=128, description="Contraseña")
-    password_confirmation: str = Field(..., min_length=8, max_length=128, description="Confirmación de contraseña")
+    password: str = Field(..., min_length=12, max_length=128, description="Contraseña")
+    password_confirmation: str = Field(..., min_length=12, max_length=128, description="Confirmación de contraseña")
     
     @validator('password')
     def validate_password_strength(cls, v):
-        """Validar que la contraseña tiene al menos una minúscula, una mayúscula y un número"""
         if not re.search(r'[a-z]', v):
             raise ValueError("La contraseña debe contener al menos una letra minúscula")
         if not re.search(r'[A-Z]', v):
@@ -203,7 +198,6 @@ class PreRegisterCompleteRequest(BaseModel):
     
     @validator('password_confirmation')
     def passwords_match(cls, v, values, **kwargs):
-        """Validar que las contraseñas coinciden"""
         if 'password' in values and v != values['password']:
             raise ValueError("Las contraseñas no coinciden")
         return v
@@ -223,4 +217,40 @@ class ActivateAccountResponse(BaseModel):
     success: bool
     message: str
 
+class AdminUserUpdateRequest(BaseModel):
+    """
+    Esquema para actualizar la información del usuario por parte del administrador.
+    Campos actualizables:
+      - Nombre, primer apellido, segundo apellido,
+      - Tipo de documento, número de documento, fecha de expedición,
+      - Fecha de nacimiento, género y roles asignados.
+    """
+    name: str = Field(..., min_length=1, max_length=30, description="Nombres del usuario")
+    first_last_name: str = Field(..., min_length=1, max_length=30, description="Primer apellido")
+    second_last_name: str = Field(..., min_length=1, max_length=30, description="Segundo apellido")
+    type_document_id: int = Field(..., description="ID del tipo de documento")
+    document_number: str = Field(..., max_length=30, description="Número de documento")
+    date_issuance_document: date = Field(..., description="Fecha de expedición del documento")
+    birthday: date = Field(..., description="Fecha de nacimiento")
+    gender_id: int = Field(..., description="ID del género (1=Hombre, 2=Mujer, 3=Otro)")
+    roles: List[int] = Field(..., description="Lista de IDs de roles asignados al usuario")
 
+    @validator('document_number')
+    def validate_document_number(cls, v):
+        if not v.isdigit():
+            raise ValueError("El número de documento debe contener solo dígitos")
+        return v
+
+    @validator('birthday')
+    def validate_birthday(cls, v):
+        if v > date.today():
+            raise ValueError("La fecha de nacimiento no puede ser en el futuro")
+        return v
+
+    @validator('date_issuance_document')
+    def validate_issuance_date(cls, v, values):
+        if v > date.today():
+            raise ValueError("La fecha de expedición no puede ser en el futuro")
+        if 'birthday' in values and v < values['birthday']:
+            raise ValueError("La fecha de expedición no puede ser anterior a la fecha de nacimiento")
+        return v

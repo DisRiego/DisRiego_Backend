@@ -137,20 +137,20 @@ class AuthService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al crear el token: {str(e)}")
 
-def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
-    """
-    Verifica el token JWT y retorna la información del usuario actual.
-    Si el token es inválido, lanza una excepción.
-    """
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Credenciales inválidas",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+        """
+        Verifica el token JWT y retorna la información del usuario actual.
+        Si el token es inválido, lanza una excepción.
+        """
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            return payload
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Credenciales inválidas",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
 class OAuthService:
     """Servicio para gestionar la autenticación con proveedores OAuth"""

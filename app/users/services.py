@@ -60,7 +60,7 @@ class UserService:
             )
             
     async def complete_first_login_registration(self, user_id: int, country: str, 
-                                        department: str, municipality: int, 
+                                        department: str, city: int, 
                                         address: str, phone: str, 
                                         profile_picture: str = None) -> dict:
         """
@@ -70,7 +70,7 @@ class UserService:
             user_id: ID del usuario
             country: Pais de residencia
             department: Departamento o provincia
-            municipality: Codigo de municipio (1-37)
+            city: Codigo de municipio (1-37)
             address: Direccion completa
             phone: Numero de teléfono
             profile_picture: Ruta a la imagen de perfil (opcional)
@@ -94,7 +94,7 @@ class UserService:
                 )
                 
             # Validar que el municipio esté en el rango correcto
-            if municipality < 1 or municipality > 37:
+            if city < 1 or city > 37:
                 return JSONResponse(
                     status_code=400,
                     content={
@@ -109,7 +109,7 @@ class UserService:
             # Actualizar los datos del usuario
             user.country = country
             user.department = department
-            user.municipality = municipality
+            user.city = city
             user.address = address
             user.phone = phone
             
@@ -165,7 +165,7 @@ class UserService:
                 "success": True,
                 "data": {
                     "first_login_complete": user.first_login_complete,
-                    "has_profile_data": user.country is not None and user.department is not None and user.municipality is not None
+                    "has_profile_data": user.country is not None and user.department is not None and user.city is not None
                 }
             }
         except Exception as e:
@@ -288,7 +288,7 @@ class UserService:
                     # Nuevos campos
                     User.country,
                     User.department,
-                    User.municipality,
+                    User.city,
                     User.first_login_complete
                 )
                 .outerjoin(User.type_document)
@@ -329,7 +329,7 @@ class UserService:
                     # Nuevos campos
                     "country": user.country,
                     "department": user.department,
-                    "municipality": user.municipality,
+                    "city": user.city,
                     "first_login_complete": user.first_login_complete
                 }
 
@@ -475,19 +475,7 @@ class UserService:
                 "message": str(e)
             }})
     async def validate_for_pre_register(self, document_type_id: int, document_number: str, 
-                                      date_issuance_document: datetime) -> PreRegisterResponse:
-        """
-        Valida que el documento existe en el sistema y está asociado a un usuario
-        creado por un administrador que aún no ha completado su registro.
-        
-        Args:
-            document_type_id: ID del tipo de documento
-            document_number: Número de documento
-            date_issuance_document: Fecha de expedición del documento
-            
-        Returns:
-            Objeto PreRegisterResponse con resultado de la validación
-        """
+                                        date_issuance_document: datetime) -> PreRegisterResponse:
         try:
             # Convertir documento a int para la búsqueda
             doc_number_int = int(document_number)
@@ -512,14 +500,14 @@ class UserService:
                 )
                 
             # Verificar que el usuario no haya completado su pre-registro
-            if user.is_pre_registered:
+            if user.status_id == 1:
                 return PreRegisterResponse(
                     success=False,
                     message="Este usuario ya ha realizado su pre-registro. Por favor inicie sesión o use la opción de recuperar contraseña."
                 )
                 
-            # Verificar que el usuario no haya sido activado
-            if user.is_active:
+            # Verificar que el usuario ya esté activo (status_id == 1 significa activo)
+            if user.status_id == 1:
                 return PreRegisterResponse(
                     success=False,
                     message="Esta cuenta ya está activa. Por favor inicie sesión o use la opción de recuperar contraseña."
@@ -619,7 +607,7 @@ class UserService:
             user.email = email
             user.password = hash_password
             user.password_salt = salt
-            user.is_pre_registered = True
+            user.status_id = 1
             user.pre_register_tokens[-1].used = True  # Marcar el token como usado
             
             # Generar token de activación
@@ -663,15 +651,6 @@ class UserService:
             raise Exception(f"Error inesperado: {str(e)}")
 
     async def activate_account(self, activation_token: str) -> ActivateAccountResponse:
-        """
-        Activa la cuenta del usuario a través del enlace enviado por email.
-        
-        Args:
-            activation_token: Token de activación
-            
-        Returns:
-            Objeto ActivateAccountResponse con resultado de la activación
-        """
         try:
             # Verificar que el token es válido y no ha sido usado
             token = self.db.query(ActivationToken).filter(
@@ -695,22 +674,18 @@ class UserService:
                     message="Usuario no encontrado. Por favor, contacte al administrador."
                 )
                 
-            # Activar la cuenta
-            user.is_active = True
-            token.used = True  # Marcar el token como usado
-            
-            # Actualizar el estado del usuario si es necesario (por ejemplo, a "Activo")
+            # Activar la cuenta: se marca el token como usado y se actualiza el status_id a 1 (Activo)
+            token.used = True
             if user.status_id is None or user.status_id == 2:  # Asumiendo que 2 es "Inactivo"
                 user.status_id = 1  # Asumiendo que 1 es "Activo"
             
             self.db.commit()
             
-            # Retornar respuesta exitosa
             return ActivateAccountResponse(
                 success=True,
                 message="¡Su cuenta ha sido activada con éxito! Ahora puede iniciar sesión en el sistema."
             )
-            
+        
         except ValueError as e:
             self.db.rollback()
             raise ValueError(f"Error en la activación: {str(e)}")
@@ -722,273 +697,204 @@ class UserService:
             raise Exception(f"Error inesperado: {str(e)}")
     
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+    oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-    
-def list_user(self, user_id: int):
-        """
-        Obtiene la información completa de un usuario, incluyendo relaciones:
-        type_document, status_user, gender y roles.
-        """
-        try:
-            user = (
-                self.db.query(User)
-                .options(
-                    joinedload(User.type_document),
-                    joinedload(User.status_user),
-                    joinedload(User.gender),
-                    joinedload(User.roles)
+        
+    def list_user(self, user_id: int):
+            """
+            Obtiene la información completa de un usuario, incluyendo relaciones:
+            type_document, status_user, gender y roles.
+            """
+            try:
+                user = (
+                    self.db.query(User)
+                    .options(
+                        joinedload(User.type_document),
+                        joinedload(User.status_user),
+                        joinedload(User.gender),
+                        joinedload(User.roles)
+                    )
+                    .filter(User.id == user_id)
+                    .first()
                 )
-                .filter(User.id == user_id)
-                .first()
-            )
-            if not user:
-                return {
-                    "success": False,
-                    "data": {
-                        "title": "Error al obtener el usuario",
-                        "message": "Usuario no encontrado."
-                    }
-                }
-            
-            user_dict = {
-                "id": user.id,
-                "email": user.email,
-                "name": user.name,
-                "first_last_name": user.first_last_name,
-                "second_last_name": user.second_last_name,
-                "address": user.address,
-                "profile_picture": user.profile_picture,
-                "phone": user.phone,
-                "document_number": user.document_number,
-                "date_issuance_document": user.date_issuance_document,
-                "type_document_id": user.type_document_id,
-                "status_id": user.status_id,
-                "gender_id": user.gender_id,
-                # Si las relaciones están cargadas, se obtienen sus nombres
-                "type_document_name": user.type_document.name if user.type_document else None,
-                "status_name": user.status_user.name if user.status_user else None,
-                "status_description": user.status_user.description if user.status_user else None,
-                "gender_name": user.gender.name if user.gender else None,
-                "roles": [{"id": role.id, "name": role.name} for role in user.roles],
-                # Nuevos campos
-                "country": user.country,
-                "department": user.department,
-                "municipality": user.municipality,
-                "first_login_complete": user.first_login_complete
-            }
-            
-            return jsonable_encoder({"success": True, "data": [user_dict]})
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al obtener la información del usuario: {str(e)}"
-            )
-        
-
-async def update_basic_profile(self, user_id: int, country: str = None, 
-                             department: str = None, municipality: int = None,
-                             address: str = None, phone: str = None,
-                             profile_picture: str = None) -> dict:
-        """
-        Actualiza solo la informacion basica del perfil de un usuario.
-        
-        Args:
-            user_id: ID del usuario
-            country: Pais (opcional)
-            department: Departamento (opcional)
-            municipality: Codigo de municipio (opcional)
-            address: Direccion (opcional)
-            phone: Teléfono (opcional)
-            profile_picture: Ruta a la imagen de perfil (opcional)
-            
-        Returns:
-            Diccionario con el resultado de la operacion
-        """
-        try:
-            # Verificar que el usuario existe
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
-                return JSONResponse(
-                    status_code=404,
-                    content={
+                if not user:
+                    return {
                         "success": False,
                         "data": {
-                            "title": "Error en actualizacion",
-                            "message": "Usuario no encontrado"
+                            "title": "Error al obtener el usuario",
+                            "message": "Usuario no encontrado."
                         }
                     }
+                
+                user_dict = {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "first_last_name": user.first_last_name,
+                    "second_last_name": user.second_last_name,
+                    "address": user.address,
+                    "profile_picture": user.profile_picture,
+                    "phone": user.phone,
+                    "document_number": user.document_number,
+                    "date_issuance_document": user.date_issuance_document,
+                    "type_document_id": user.type_document_id,
+                    "status_id": user.status_id,
+                    "gender_id": user.gender_id,
+                    # Si las relaciones están cargadas, se obtienen sus nombres
+                    "type_document_name": user.type_document.name if user.type_document else None,
+                    "status_name": user.status_user.name if user.status_user else None,
+                    "status_description": user.status_user.description if user.status_user else None,
+                    "gender_name": user.gender.name if user.gender else None,
+                    "roles": [{"id": role.id, "name": role.name} for role in user.roles],
+                    # Nuevos campos
+                    "country": user.country,
+                    "department": user.department,
+                    "city": user.city,
+                    "first_login_complete": user.first_login_complete
+                }
+                
+                return jsonable_encoder({"success": True, "data": [user_dict]})
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error al obtener la información del usuario: {str(e)}"
                 )
+            
+
+    async def update_basic_profile(self, user_id: int, country: str = None, 
+                                department: str = None, city: int = None,
+                                address: str = None, phone: str = None,
+                                profile_picture: str = None) -> dict:
+            """
+            Actualiza solo la informacion basica del perfil de un usuario.
+            
+            Args:
+                user_id: ID del usuario
+                country: Pais (opcional)
+                department: Departamento (opcional)
+                city: Codigo de municipio (opcional)
+                address: Direccion (opcional)
+                phone: Teléfono (opcional)
+                profile_picture: Ruta a la imagen de perfil (opcional)
                 
-            # Actualizar solo los campos proporcionados
-            if country is not None:
-                user.country = country
-                
-            if department is not None:
-                user.department = department
-                
-            if municipality is not None:
-                # Validar el rango del municipio
-                if municipality < 1 or municipality > 37:
+            Returns:
+                Diccionario con el resultado de la operacion
+            """
+            try:
+                # Verificar que el usuario existe
+                user = self.db.query(User).filter(User.id == user_id).first()
+                if not user:
                     return JSONResponse(
-                        status_code=400,
+                        status_code=404,
                         content={
                             "success": False,
                             "data": {
                                 "title": "Error en actualizacion",
-                                "message": "El codigo de municipio debe estar entre 1 y 37"
+                                "message": "Usuario no encontrado"
                             }
                         }
                     )
-                user.municipality = municipality
+                    
+                # Actualizar solo los campos proporcionados
+                if country is not None:
+                    user.country = country
+                    
+                if department is not None:
+                    user.department = department
+                    
+                if city is not None:
+                    # Validar el rango del municipio
+                    if city < 1 or city > 37:
+                        return JSONResponse(
+                            status_code=400,
+                            content={
+                                "success": False,
+                                "data": {
+                                    "title": "Error en actualizacion",
+                                    "message": "El codigo de municipio debe estar entre 1 y 37"
+                                }
+                            }
+                        )
+                    user.city = city
+                    
+                if address is not None:
+                    user.address = address
+                    
+                if phone is not None:
+                    user.phone = phone
+                    
+                if profile_picture is not None:
+                    user.profile_picture = profile_picture
+                    
+                # Guardar los cambios
+                self.db.commit()
+                self.db.refresh(user)
                 
-            if address is not None:
-                user.address = address
-                
-            if phone is not None:
-                user.phone = phone
-                
-            if profile_picture is not None:
-                user.profile_picture = profile_picture
-                
-            # Guardar los cambios
-            self.db.commit()
-            self.db.refresh(user)
-            
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": True,
-                    "data": {
-                        "title": "Perfil actualizado",
-                        "message": "Informacion del perfil actualizada correctamente"
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": True,
+                        "data": {
+                            "title": "Perfil actualizado",
+                            "message": "Informacion del perfil actualizada correctamente"
+                        }
                     }
-                }
-            )
-        except Exception as e:
-            self.db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al actualizar el perfil: {str(e)}"
-            )
-        
-    
-def create_user_by_admin(self, name: str, first_last_name: str, second_last_name: str, 
-                        type_document_id: int, document_number: str, 
-                        date_issuance_document: date, birthday: date, 
-                        gender_id: int, roles: List[int]) -> AdminUserCreateResponse:
-    """
-    Crea un nuevo usuario en el sistema con los datos proporcionados por un administrador.
-    
-    Args:
-        name: Nombres del usuario
-        first_last_name: Primer apellido
-        second_last_name: Segundo apellido
-        type_document_id: ID del tipo de documento
-        document_number: Número de documento
-        date_issuance_document: Fecha de expedición del documento
-        birthday: Fecha de nacimiento
-        gender_id: ID del género
-        roles: Lista de IDs de roles asignados al usuario
-        
-    Returns:
-        Respuesta con estado de éxito y mensaje
-    """
-    try:
-        # Validar que el tipo de documento exista
-        type_document = self.db.query(TypeDocument).filter(TypeDocument.id == type_document_id).first()
-        if not type_document:
-            return AdminUserCreateResponse(
-                success=False,
-                message=f"El tipo de documento con ID {type_document_id} no existe"
-            )
+                )
+            except Exception as e:
+                self.db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error al actualizar el perfil: {str(e)}"
+                )
             
-        # Validar que el género exista
-        gender = self.db.query(Gender).filter(Gender.id == gender_id).first()
-        if not gender:
-            return AdminUserCreateResponse(
-                success=False,
-                message=f"El género con ID {gender_id} no existe"
-            )
-            
-        # Verificar si ya existe un usuario con ese número de documento
-        existing_user = self.db.query(User).filter(User.document_number == document_number).first()
-        if existing_user:
-            return AdminUserCreateResponse(
-                success=False,
-                message=f"Ya existe un usuario con el número de documento {document_number}"
-            )
-            
-        # Validar los roles
-        db_roles = self.db.query(Role).filter(Role.id.in_(roles)).all()
-        if len(db_roles) != len(roles):
-            return AdminUserCreateResponse(
-                success=False,
-                message="Uno o más roles seleccionados no existen"
-            )
-            
-        # Generar una contraseña aleatoria segura (12 caracteres)
-        password = self._generate_random_password()
+    def create_user_by_admin(self, name: str, first_last_name: str, second_last_name: str, 
+                                type_document_id: int, document_number: str, date_issuance_document: datetime,
+                                birthday: datetime, gender_id: int, roles: List[int]):
+            try:
+                db_user = User(
+                    name=name,
+                    first_last_name=first_last_name,
+                    second_last_name=second_last_name,
+                    type_document_id=type_document_id,
+                    document_number=document_number,
+                    date_issuance_document=date_issuance_document,
+                    birthday=birthday,
+                    gender_id=gender_id,
+                    status_id=4  # Se asigna el status "Activo" al crear el usuario
+                )
+                
+                if roles:
+                    roles_obj = self.db.query(Role).filter(Role.id.in_(roles)).all()
+                    db_user.roles = roles_obj
+
+                self.db.add(db_user)
+                self.db.commit()
+                self.db.refresh(db_user)
+                
+                return {"success": True, "message": "Usuario creado correctamente", "user_id": db_user.id}
+
+            except Exception as e:
+                self.db.rollback()
+                raise HTTPException(
+                    status_code=500,
+                    detail={
+                        "success": False,
+                        "data": {
+                            "title": "Error al crear usuario",
+                            "message": str(e),
+                        },
+                    },
+                )
+
+
         
-        # Generar hash y salt para la contraseña
-        salt, hash_password = self.hash_password(password)
-        
-        # Generar un email temporal basado en el nombre y número de documento
-        # Por ejemplo: juan.perez.12345678@temp.disriego.com
-        email_username = f"{name.lower().replace(' ', '.')}.{first_last_name.lower()}.{document_number}"
-        email = f"{email_username}@temp.disriego.com"
-        
-        # Crear el nuevo usuario
-        new_user = User(
-            name=name,
-            first_last_name=first_last_name,
-            second_last_name=second_last_name,
-            type_document_id=type_document_id,
-            document_number=document_number,
-            date_issuance_document=date_issuance_document,
-            birthday=birthday,
-            gender_id=gender_id,
-            email=email,
-            password=hash_password,
-            password_salt=salt,
-            status_id=1  # Asumiendo que 1 es el estado "Activo"
-        )
-        
-        # Asignar roles
-        new_user.roles = db_roles
-        
-        # Guardar en la base de datos
-        self.db.add(new_user)
-        self.db.commit()
-        self.db.refresh(new_user)
-        
-        # Intentar enviar email con credenciales (en un entorno real)
+    def get_genders(self):
+        """Obtiene todos los géneros disponibles en el sistema"""
         try:
-            self._send_credentials_email(email, password, name)
+            genders = self.db.query(Gender).all()
+            return {
+                "success": True,
+                "data": jsonable_encoder(genders)
+            }
         except Exception as e:
-            # Log el error pero continuamos porque el usuario ya fue creado
-            print(f"Error al enviar email: {str(e)}")
-            
-        return AdminUserCreateResponse(
-            success=True,
-            message=f"Usuario creado correctamente. Email temporal: {email}, Contraseña: {password}",
-            user_id=new_user.id
-        )
-            
-    except Exception as e:
-        self.db.rollback()
-        raise Exception(f"Error al crear usuario: {str(e)}")
-
-
-
-    
-def get_genders(self):
-    """Obtiene todos los géneros disponibles en el sistema"""
-    try:
-        genders = self.db.query(Gender).all()
-        return {
-            "success": True,
-            "data": jsonable_encoder(genders)
-        }
-    except Exception as e:
-        raise Exception(f"Error al obtener géneros: {str(e)}")
+            raise Exception(f"Error al obtener géneros: {str(e)}")

@@ -16,19 +16,13 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 @router.post("/login/", response_model=Token)
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    """
-    Inicia sesión y genera un token de acceso con la siguiente información:
-    - id, name, email, status_date
-    - rol: una lista de roles, cada uno con sus permisos (si existen, de lo contrario una lista vacía)
-    """
     auth_service = AuthService(db)
-    
     
     user = auth_service.authenticate_user(user_credentials.email, user_credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     
-    
+    # Recargar el usuario con relaciones
     user = (
         db.query(User)
         .options(joinedload(User.roles).joinedload(Role.permissions))
@@ -36,22 +30,30 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         .first()
     )
     
-   
+    # Si el usuario no ha completado su primer login, indicar al cliente
+    if not user.first_login_complete:
+        raise HTTPException(
+            status_code=403,
+            detail="Debe completar el primer registro. Redirija a /first-login-register."
+        )
+    
     roles = []
     for role in user.roles:
         role_data = {"id": role.id, "name": role.name}
         permisos = [{"id": perm.id, "name": perm.name} for perm in role.permissions]
-        role_data["permisos"] = permisos  # Si no hay permisos, será una lista vacía
+        role_data["permisos"] = permisos
         roles.append(role_data)
     
-   
+    
     token_data = {
         "sub": user.email,   
         "id": user.id,
         "name": user.name,
         "email": user.email,
         "status_date": str(datetime.utcnow()),
-        "rol": roles
+        "rol": roles,
+        "birthday": user.birthday,
+        "first_login_complete": user.first_login_complete
     }
     
     access_token = auth_service.create_access_token(data=token_data)
