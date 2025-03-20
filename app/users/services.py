@@ -321,6 +321,7 @@ class UserService:
                     "date_issuance_document": user.date_issuance_document,
                     "document_number": user.document_number,
                     "status": user.status_id,
+                    "birthday": user.birthday,
                     "status_name": user.status_name,
                     "status_description": user.status_description,
                     "type_document": user.type_document_id,
