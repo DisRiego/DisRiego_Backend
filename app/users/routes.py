@@ -95,8 +95,8 @@ async def activate_account(
 @router.post("/first-login-register", response_model=dict)
 async def register_after_first_login(
     user_id: int = Form(...),
-    country: int = Form(...),
-    department: int = Form(...),
+    country: str = Form(...),
+    department: str = Form(...),
     city: int = Form(...),
     address: str = Form(...),
     phone: str = Form(...),
