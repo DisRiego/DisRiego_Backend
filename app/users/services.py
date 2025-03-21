@@ -617,7 +617,7 @@ class UserService:
             return PreRegisterResponse(
                 success=True,
                 message="Pre-registro completado con éxito. Se ha enviado un correo de activación a su dirección de email.",
-                token=token
+                token=new_activation_token
             )
                 
         except ValueError as e:
