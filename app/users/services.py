@@ -606,18 +606,13 @@ class UserService:
             self.db.add(new_activation_token)
             self.db.commit()
                 
-            # Enviar correo de activación (si falla, solo se loguea el error)
-            activation_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/activate-account/{activation_token}"
-            try:
-                await self._send_activation_email(email, user.name, activation_url)
-            except Exception as e:
-                print(f"Error al enviar correo de activación: {str(e)}")
+
                 
             # Retornar respuesta exitosa
             return PreRegisterResponse(
                 success=True,
                 message="Pre-registro completado con éxito. Se ha enviado un correo de activación a su dirección de email.",
-                token=new_activation_token
+                token=activation_token
             )
                 
         except ValueError as e:
