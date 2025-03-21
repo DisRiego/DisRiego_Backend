@@ -544,18 +544,6 @@ class UserService:
             raise Exception(f"Error inesperado: {str(e)}")
 
     async def complete_pre_register(self, token: str, email: str, password: str) -> PreRegisterResponse:
-        """
-        Completa el pre-registro del usuario añadiendo email y contraseña,
-        y envía un correo con enlace de activación.
-        
-        Args:
-            token: Token de validación
-            email: Correo electrónico
-            password: Contraseña
-            
-        Returns:
-            Objeto PreRegisterResponse con resultado del pre-registro
-        """
         try:
             # Verificar que el token es válido y no ha sido usado
             pre_register_token = self.db.query(PreRegisterToken).filter(
@@ -569,42 +557,44 @@ class UserService:
                     success=False,
                     message="Token inválido o expirado. Por favor, reinicie el proceso."
                 )
-                
+                    
             # Obtener el usuario asociado al token
             user = self.db.query(User).filter(User.id == pre_register_token.user_id).first()
-            
             if not user:
                 return PreRegisterResponse(
                     success=False,
                     message="Usuario no encontrado. Por favor, contacte al administrador."
                 )
-                
+                    
             # Verificar que el email no esté en uso por otro usuario
             existing_email = self.db.query(User).filter(
                 User.email == email,
                 User.id != user.id
             ).first()
-            
+                
             if existing_email:
+                # No se marca el token como usado para permitir reintentar
                 return PreRegisterResponse(
                     success=False,
                     message="Este correo electrónico ya está registrado. Por favor utilice otro."
                 )
-                
-            # Generar hash y salt para la contraseña
+                    
+            # Generar hash y salt para la nueva contraseña
             salt, hash_password = self.hash_password(password)
-            
+                
             # Actualizar los datos del usuario
             user.email = email
             user.password = hash_password
             user.password_salt = salt
-            user.status_id = 1
-            user.pre_register_tokens[-1].used = True  # Marcar el token como usado
-            
+            user.status_id = 1  # Marca al usuario como activo
+
+            # Marcar el token de pre-registro como usado
+            pre_register_token.used = True
+                
             # Generar token de activación
             activation_token = str(uuid.uuid4())
             expiration = datetime.utcnow() + timedelta(days=7)  # Token válido por 7 días
-            
+                
             # Guardar el token de activación
             new_activation_token = ActivationToken(
                 token=activation_token,
@@ -612,25 +602,23 @@ class UserService:
                 expires_at=expiration,
                 used=False
             )
-            
+                
             self.db.add(new_activation_token)
             self.db.commit()
-            
-            # Enviar correo de activación
+                
+            # Enviar correo de activación (si falla, solo se loguea el error)
             activation_url = f"{os.getenv('FRONTEND_URL', 'http://localhost:3000')}/activate-account/{activation_token}"
-            
             try:
                 await self._send_activation_email(email, user.name, activation_url)
             except Exception as e:
-                # Log el error pero continuamos porque el pre-registro ya fue completado
                 print(f"Error al enviar correo de activación: {str(e)}")
-            
+                
             # Retornar respuesta exitosa
             return PreRegisterResponse(
                 success=True,
                 message="Pre-registro completado con éxito. Se ha enviado un correo de activación a su dirección de email."
             )
-            
+                
         except ValueError as e:
             self.db.rollback()
             raise ValueError(f"Error en el pre-registro: {str(e)}")

@@ -54,7 +54,6 @@ async def create_update_company_info(
         state=state,
         city=city,
         address=address,
-        logo="", 
         color_palette_id=color_palette_id
     )
     
@@ -71,7 +70,7 @@ async def update_company_basic(
     db: Session = Depends(get_db)
 ):
     company_service = services.CompanyService(db)
-    return await company_service.update_basic_info(name, nit, digital_certificate_id, logo)
+    return await company_service.update_basic_info(name, nit, digital_certificate_id)
 
 # Endpoint para información de contacto: correo y teléfono
 @router.patch("/company/contact", summary="Actualizar información de contacto de la empresa")
