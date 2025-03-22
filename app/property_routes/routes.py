@@ -42,6 +42,27 @@ async def create_property(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
 
+@router.post("/user-search/", response_model=dict)
+async def search_user_by_document(
+    document_type: int = Form(...),
+    document_number: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Busca un usuario por tipo y número de documento.
+    Retorna: user_id, name, first_lastname y second_lastname.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.search_user_by_document(
+            document_type=document_type,
+            document_number=document_number
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en la búsqueda: {str(e)}")
+
 
 @router.post("/lot/", response_model=dict)
 async def create_lot(

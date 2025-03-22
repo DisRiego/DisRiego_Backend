@@ -159,6 +159,47 @@ class PropertyLotService:
                     }
                 }
             )
+    def search_user_by_document(self, document_type: int, document_number: str):
+        try:
+            user = self.db.query(User).filter(
+                User.document_number == document_number,
+                User.type_document_id == document_type
+            ).first()
+            if not user:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "data": {
+                            "message": "Usuario no encontrado."
+                        }
+                    }
+                )
+            
+            user_info = {
+                "user_id": user.id,
+                "name": user.name,
+                "first_lastname": user.first_last_name,
+                "second_lastname": user.second_last_name
+            }
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "data": user_info
+                }
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "data": {
+                        "message": f"Error al buscar el usuario: {str(e)}"
+                    }
+                }
+            )
 
     async def save_file(self, file: UploadFile, directory: str = "files/") -> str:
         """Guardar un archivo en el servidor con un nombre único"""
