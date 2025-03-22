@@ -89,6 +89,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         "email": user.email,
         "status_date": datetime.utcnow().isoformat(),
         "rol": roles,
+        "status" : user.status_id,
         "birthday": user.birthday.isoformat(),
         "first_login_complete": user.first_login_complete
     }
