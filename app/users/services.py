@@ -651,8 +651,8 @@ class UserService:
                 
             # Activar la cuenta: se marca el token como usado y se actualiza el status_id a 1 (Activo)
             token.used = True
-            if user.status_id is None or user.status_id == 2:  # Asumiendo que 2 es "Inactivo"
-                user.status_id = 1  # Asumiendo que 1 es "Activo"
+            if user.status_id is None or user.status_id == 2:  #  2 es "Inactivo"
+                user.status_id = 1  #  1 es "Activo"
             
             self.db.commit()
             
@@ -715,13 +715,12 @@ class UserService:
                     "type_document_id": user.type_document_id,
                     "status_id": user.status_id,
                     "gender_id": user.gender_id,
-                    # Si las relaciones están cargadas, se obtienen sus nombres
+                    "birthday" : user.birthday,
                     "type_document_name": user.type_document.name if user.type_document else None,
                     "status_name": user.status_user.name if user.status_user else None,
                     "status_description": user.status_user.description if user.status_user else None,
                     "gender_name": user.gender.name if user.gender else None,
                     "roles": [{"id": role.id, "name": role.name} for role in user.roles],
-                    # Nuevos campos
                     "country": user.country,
                     "department": user.department,
                     "city": user.city,
@@ -746,21 +745,7 @@ class UserService:
         phone: Optional[str] = None,
         profile_picture: Optional[str] = None
     ) -> dict:
-        """
-        Actualiza solo la información básica del perfil de un usuario.
 
-        Args:
-            user_id: ID del usuario
-            country: País (opcional)
-            department: Departamento (opcional)
-            city: Código de municipio (opcional)
-            address: Dirección (opcional)
-            phone: Teléfono (opcional)
-            profile_picture: Ruta a la imagen de perfil (opcional)
-
-        Returns:
-            Diccionario con el resultado de la operación
-        """
         try:
             # Verificar que el usuario existe
             user = self.db.query(User).filter(User.id == user_id).first()
@@ -776,13 +761,11 @@ class UserService:
                     }
                 )
 
-            # Actualizar solo los campos proporcionados
             if country is not None:
                 user.country = country
             if department is not None:
                 user.department = department
             if city is not None:
-                # Se asume que ya se validó el rango en el router
                 user.city = city
             if address is not None:
                 user.address = address

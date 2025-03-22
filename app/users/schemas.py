@@ -95,7 +95,7 @@ class FirstLoginProfileUpdate(BaseModel):
     user_id: int
     country: str = Field(..., description="País de residencia")
     department: str = Field(..., description="Departamento o provincia")
-    city: int = Field(..., ge=1, le=37, description="Código del municipio (1-37)")
+    city: int = Field(..., description="Código del municipio (1-37)")
     address: str = Field(..., description="Dirección completa")
     phone: str = Field(..., description="Número de teléfono")
     profile_picture: Optional[str] = None
@@ -149,7 +149,7 @@ class UserCreateRequest(BaseModel):
 class UserUpdateInfo(BaseModel):
     country: Optional[str] = Field(None, description="País de residencia")
     department: Optional[str] = Field(None, description="Departamento o provincia")
-    city: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
+    city: Optional[int] = Field(None, description="Código del municipio ")
     address: Optional[str] = Field(None, description="Dirección completa")
     phone: Optional[str] = Field(None, description="Número de teléfono")
     profile_picture: Optional[str] = None
@@ -162,10 +162,10 @@ class UserEditRequest(BaseModel):
     """
     country: Optional[str] = Field(None, description="País de residencia")
     department: Optional[str] = Field(None, description="Departamento o provincia")
-    city: Optional[int] = Field(None, ge=1, le=37, description="Código del municipio (1-37)")
+    city: Optional[int] = Field(None, description="Código del municipio ")
     address: Optional[str] = Field(None, description="Dirección completa")
     phone: Optional[str] = Field(None, description="Número de teléfono")
-    profile_picture: Optional[str] = None
+
 
 class PreRegisterValidationRequest(BaseModel):
     """Solicitud para validar documento antes del pre-registro"""

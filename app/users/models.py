@@ -36,13 +36,11 @@ class User(Base):
     first_login_complete = Column(Boolean, default=False)
     type_document_id = Column(Integer, ForeignKey('type_document.id'), nullable=True)
     status_id = Column(Integer, ForeignKey('status_user.id'), nullable=True)
-    # Se repite gender_id; se conserva una sola definición.
-    
-    # Nuevos campos para el pre-registro
+
     last_pre_register_attempt = Column(DateTime, nullable=True)
     pre_register_attempts = Column(Integer, default=0)
 
-    # Relaciones
+
     roles = relationship("Role", secondary=user_role_table, back_populates="users")
     type_document = relationship("TypeDocument", back_populates="users")
     status_user = relationship("Status", back_populates="users")

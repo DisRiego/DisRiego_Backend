@@ -143,7 +143,7 @@ def check_profile_completion(user_id: int, db: Session = Depends(get_db)):
 @router.put("/edit-profile/{user_id}", response_model=dict)
 async def edit_profile(
     user_id: int,
-    update_data: UserEditRequest,  # Recibe un JSON que cumpla con este modelo
+    update_data: UserEditRequest,  
     db: Session = Depends(get_db),
     current_user: dict = Depends(AuthService.get_current_user)
 ):
@@ -161,7 +161,6 @@ async def edit_profile(
             city=update_data.city,
             address=update_data.address,
             phone=update_data.phone,
-            profile_picture=update_data.profile_picture
         )
         return result
     except HTTPException as e:
