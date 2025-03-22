@@ -49,6 +49,8 @@ async def validate_document_for_pre_register(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error en la validación: {str(e)}")
 
@@ -69,6 +71,8 @@ async def complete_pre_register(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al completar el pre-registro: {str(e)}")
 
@@ -85,6 +89,8 @@ async def activate_account(
         return await user_service.activate_account(activation_token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al activar la cuenta: {str(e)}")
 
@@ -112,7 +118,7 @@ async def register_after_first_login(
         profile_picture_path = None
         if profile_picture:
             profile_picture_path = await user_service.save_profile_picture(profile_picture)
-        result = await user_service.complete_first_login_registration(
+        return await user_service.complete_first_login_registration(
             user_id=user_id,
             country=country,
             department=department,
@@ -121,7 +127,6 @@ async def register_after_first_login(
             phone=phone,
             profile_picture=profile_picture_path
         )
-        return result
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -154,7 +159,7 @@ async def edit_profile(
         raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
     try:
         user_service = UserService(db)
-        result = await user_service.update_basic_profile(
+        return await user_service.update_basic_profile(
             user_id=user_id,
             country=update_data.country,
             department=update_data.department,
@@ -162,7 +167,6 @@ async def edit_profile(
             address=update_data.address,
             phone=update_data.phone,
         )
-        return result
     except HTTPException as e:
         raise e
     except Exception as e:
@@ -183,8 +187,7 @@ async def update_photo(
     try:
         user_service = UserService(db)
         photo_path = await user_service.save_profile_picture(profile_picture)
-        result = user_service.update_user(user_id, profile_picture=photo_path)
-        return result
+        return user_service.update_user(user_id, profile_picture=photo_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar la foto: {str(e)}")
 
@@ -209,7 +212,7 @@ def create_user_by_admin(
         raise HTTPException(status_code=403, detail="No tiene permisos para crear usuarios")
     try:
         user_service = UserService(db)
-        result = user_service.create_user_by_admin(
+        return user_service.create_user_by_admin(
             name=user_data.name,
             first_last_name=user_data.first_last_name,
             second_last_name=user_data.second_last_name,
@@ -220,7 +223,6 @@ def create_user_by_admin(
             gender_id=user_data.gender_id,
             roles=user_data.roles
         )
-        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -253,8 +255,7 @@ def admin_edit_user(
             document_number=update_data.document_number,
             date_issuance_document=update_data.date_issuance_document,
             birthday=update_data.birthday,
-            gender_id=update_data.gender_id,
-            
+            gender_id=update_data.gender_id,    
         )
         if update_data.roles:
             roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
@@ -273,7 +274,6 @@ def get_document_types(db: Session = Depends(get_db)):
         return user_service.get_type_documents()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los tipos de documentos: {str(e)}")
-
 
 @router.get("/genders" , tags=["Users"])
 def get_genders(db: Session = Depends(get_db)):
@@ -323,6 +323,8 @@ def list_user(user_id: int, db: Session = Depends(get_db)):
     try:
         user_service = UserService(db)
         return user_service.list_user(user_id)
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener el usuario: {str(e)}")
 
@@ -334,5 +336,7 @@ def list_users(db: Session = Depends(get_db)):
     try:
         user_service = UserService(db)
         return user_service.list_users()
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar los usuarios: {str(e)}")
