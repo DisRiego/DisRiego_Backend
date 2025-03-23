@@ -13,16 +13,10 @@ class Property(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
-    State = Column(Boolean, nullable = True)
-    # description = Column(Text, nullable=True)
-    # location = Column(String, nullable=True)
-
-    # Nuevas columnas para almacenar las rutas de los archivos
-    # file1_path = Column(String, nullable=True)
-    # file2_path = Column(String, nullable=True)
+    state = Column("State", Integer, ForeignKey("vars.id"), default=16, nullable=False)
 
     def __repr__(self):
-        return f"<Property(id={self.id}, name={self.name})>"
+        return f"<Property(id={self.id}, name={self.name}, state={self.state})>"
 
 class Lot(Base):
     __tablename__ = 'lot'
@@ -35,18 +29,17 @@ class Lot(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
-    # Nuevos campos
+    
     payment_interval = Column(Integer, nullable=True)
     type_crop_id = Column(Integer, ForeignKey('type_crop.id'), nullable=True)
     planting_date = Column(Date, nullable=True)
     estimated_harvest_date = Column(Date, nullable=True)
-    state = Column("State", Boolean, nullable=True, default = True)
+    state = Column("State", Integer, ForeignKey("vars.id"), default=18, nullable=False)
 
-    # Relación con TypeCrop
     type_crop = relationship("TypeCrop", back_populates="lots")
 
     def __repr__(self):
-        return f"<Lot(id={self.id}, name={self.name})>"
+        return f"<Lot(id={self.id}, name={self.name}, state={self.state})>"
 
 class PropertyLot(Base):
     __tablename__ = 'property_lot'

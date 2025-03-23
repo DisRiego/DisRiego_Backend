@@ -170,18 +170,24 @@ class PropertyLotService:
         
 
     def update_property_state(self, property_id: int, new_state: bool):
- 
+        """
+        Actualiza el estado del predio.
+        Si se intenta inactivar (new_state == False), se verifica que no tenga lotes asociados activos.
+        Se mapea new_state a:
+        - True  -> state = 16 (Activo)
+        - False -> state = 17 (Inactivo)
+        """
         try:
             property_obj = self.db.query(Property).filter(Property.id == property_id).first()
             if not property_obj:
                 raise HTTPException(status_code=404, detail="Predio no encontrado.")
             
-            # Si se intenta inactivar el predio, verificar que no tenga lotes activos
+            # Si se intenta inactivar, verificar que no existan lotes asociados activos (state == 18)
             if new_state is False:
                 active_lots = (
                     self.db.query(Lot)
                     .join(PropertyLot, PropertyLot.lot_id == Lot.id)
-                    .filter(PropertyLot.property_id == property_id, Lot.state == True)
+                    .filter(PropertyLot.property_id == property_id, Lot.state == 18)
                     .all()
                 )
                 if active_lots:
@@ -189,9 +195,8 @@ class PropertyLotService:
                         status_code=400,
                         detail="No se puede inactivar el predio porque tiene lotes activos."
                     )
-            
-            # Actualizar el state del predio
-            property_obj.State = new_state
+            # Mapear el valor booleano a la columna state:
+            property_obj.state = 16 if new_state else 17
             self.db.commit()
             self.db.refresh(property_obj)
             return property_obj
@@ -203,15 +208,17 @@ class PropertyLotService:
 
     def update_lot_state(self, lot_id: int, new_state: bool):
         """
-        Actualiza el estado (state) de un lote, permitiendo cambiar de true a false y viceversa.
-        Si se intenta activar (new_state == True), se verifica que el predio asociado esté activo.
+        Actualiza el estado del lote.
+        Se mapea new_state a:
+        - True  -> state = 18 (Activo)
+        - False -> state = 19 (Inactivo)
+        Además, si se intenta activar (new_state == True), se verifica que el predio asociado esté activo (state == 16).
         """
         try:
             lot_obj = self.db.query(Lot).filter(Lot.id == lot_id).first()
             if not lot_obj:
                 raise HTTPException(status_code=404, detail="Lote no encontrado.")
             
-            # Si se intenta activar el lote, verificar que el predio asociado esté activo.
             if new_state is True:
                 association = self.db.query(PropertyLot).filter(PropertyLot.lot_id == lot_id).first()
                 if not association:
@@ -219,10 +226,10 @@ class PropertyLotService:
                 property_obj = self.db.query(Property).filter(Property.id == association.property_id).first()
                 if not property_obj:
                     raise HTTPException(status_code=400, detail="Predio asociado no encontrado.")
-                if property_obj.State is False:
+                if property_obj.state != 16:  # El predio debe estar activo (16)
                     raise HTTPException(status_code=400, detail="No se puede activar el lote porque el predio está desactivado.")
             
-            lot_obj.state = new_state
+            lot_obj.state = 18 if new_state else 19
             self.db.commit()
             self.db.refresh(lot_obj)
             return lot_obj

@@ -106,8 +106,9 @@ def update_property_state(
     db: Session = Depends(get_db)
 ):
     """
-    Cambia el state del predio.
-    Si se intenta pasar a false, se valida que no tenga lotes asociados activos.
+    Cambia el estado del predio.
+    new_state: true (activar → state = 16) o false (desactivar → state = 17).
+    Si se intenta desactivar y hay lotes asociados activos (state == 18), se rechaza.
     """
     try:
         property_service = PropertyLotService(db)
@@ -116,7 +117,7 @@ def update_property_state(
             "success": True,
             "data": {
                 "property_id": updated_property.id,
-                "State": updated_property.State
+                "state": updated_property.state
             }
         }
     except HTTPException as e:
@@ -132,7 +133,9 @@ def update_lot_state(
     db: Session = Depends(get_db)
 ):
     """
-    Cambia el state del lote (true/false).
+    Cambia el estado del lote.
+    new_state: true (activar → state = 18) o false (desactivar → state = 19).
+    Al activar, se valida que el predio asociado esté activo (state == 16).
     """
     try:
         property_service = PropertyLotService(db)
@@ -148,6 +151,7 @@ def update_lot_state(
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del lote: {str(e)}")
+
 
 
 @router.get("/")
