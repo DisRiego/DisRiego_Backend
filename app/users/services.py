@@ -104,7 +104,7 @@ class UserService:
 
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error al reenviar código de activación: {str(e)}")
+            raise HTTPException(status_code=429, detail=f"Error al reenviar código de activación: {str(e)}")
 
     async def complete_first_login_registration(self, user_id: int, country: str, 
                                         department: str, city: int, 

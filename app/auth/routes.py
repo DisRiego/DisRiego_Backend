@@ -72,8 +72,7 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         new_token = user_service.resend_activation_token(user)
         raise HTTPException(
             status_code=401, 
-            detail="Cuenta no activada. Se ha reenviado el código de activación a su correo.",
-            token = new_token
+            detail={"status": "false", "message": "Cuenta no activada. Se ha reenviado el código de activación a su correo.", "token": new_token}
         )
     
 
