@@ -60,9 +60,5 @@ class Vars(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    
-    # Llave foránea a Role
-    # role_id = Column(Integer, ForeignKey('roles.id'))
-    
-    # Define la relación inversa con Role
+
     role = relationship('Role', back_populates='vars')

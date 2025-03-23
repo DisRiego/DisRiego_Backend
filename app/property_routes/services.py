@@ -8,34 +8,36 @@ from sqlalchemy.orm import Session
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
 from app.users.models import User
 from datetime import date
+from app.roles.models import Vars
 
 class PropertyLotService:
     def __init__(self, db: Session):
         self.db = db
 
     def get_all_properties(self):
-        """Obtener todos los predios con el estado y el número de documento del dueño"""
+        """Obtener todos los predios, incluyendo el nombre del estado y el número de documento del dueño"""
         try:
-            
+            # Se realiza un join: Property -> Vars (para obtener el nombre del estado) y PropertyUser -> User (para el documento)
             results = (
-                self.db.query(Property, User.document_number)
+                self.db.query(
+                    Property,
+                    Vars.name.label("state_name"),
+                    User.document_number.label("owner_document_number")
+                )
                 .join(PropertyUser, Property.id == PropertyUser.property_id)
                 .join(User, PropertyUser.user_id == User.id)
+                .join(Vars, Property.state == Vars.id)
                 .all()
             )
             properties_list = []
-            for property_obj, document_number in results:
+            for property_obj, state_name, owner_document_number in results:
                 property_dict = jsonable_encoder(property_obj)
-                # Agregar la información adicional
-                property_dict["owner_document_number"] = document_number
- 
+                property_dict["state_name"] = state_name
+                property_dict["owner_document_number"] = owner_document_number
                 properties_list.append(property_dict)
 
             if not properties_list:
-                return JSONResponse(
-                    status_code=404,
-                    content={"success": False, "data": []}
-                )
+                return JSONResponse(status_code=404, content={"success": False, "data": []})
 
             return JSONResponse(
                 status_code=200,

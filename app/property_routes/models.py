@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, Float, Text , Boolean
 from sqlalchemy.orm import relationship
 from app.database import Base
+from app.roles.models import Vars
 
 class Property(Base):
     __tablename__ = 'property'
@@ -40,6 +41,7 @@ class Lot(Base):
 
     def __repr__(self):
         return f"<Lot(id={self.id}, name={self.name}, state={self.state})>"
+    
 
 class PropertyLot(Base):
     __tablename__ = 'property_lot'
