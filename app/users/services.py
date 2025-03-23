@@ -20,6 +20,9 @@ from fastapi.responses import JSONResponse
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+_activation_resend_timestamps = {}
+_RATE_LIMIT_SECONDS = 60
+
 
 class UserService:
     """Clase para gestionar la creación y obtención de usuarios"""
@@ -58,6 +61,50 @@ class UserService:
                 status_code=500,
                 detail=f"Error al guardar la imagen de perfil: {str(e)}"
             )
+    def resend_activation_token(self, user: User) -> str:
+        """
+        Invalida los tokens de activación previos para el usuario y genera uno nuevo.
+        Aplica un limitador de peticiones para evitar abusos (por user id).
+        """
+        try:
+            now = datetime.utcnow()
+            last_request = _activation_resend_timestamps.get(user.id)
+            if last_request and (now - last_request).total_seconds() < _RATE_LIMIT_SECONDS:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Demasiadas peticiones. Por favor, espera un momento antes de solicitar un nuevo código de activación."
+                )
+            # Actualiza el timestamp de la última petición para este usuario
+            _activation_resend_timestamps[user.id] = now
+
+            # Marcar como usados todos los tokens de activación pendientes del usuario
+            tokens = self.db.query(ActivationToken).filter(
+                ActivationToken.user_id == user.id,
+                ActivationToken.used == False
+            ).all()
+            for token_obj in tokens:
+                token_obj.used = True
+            self.db.commit()
+
+            # Generar un nuevo token de activación
+            new_activation_token = str(uuid.uuid4())
+            expiration = datetime.utcnow() + timedelta(days=7)  # Token válido por 7 días
+            token_obj = ActivationToken(
+                token=new_activation_token,
+                user_id=user.id,
+                expires_at=expiration,
+                used=False
+            )
+            self.db.add(token_obj)
+            self.db.commit()
+
+            # Aquí puedes incluir la lógica para enviar el correo con el nuevo token
+
+            return new_activation_token
+
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al reenviar código de activación: {str(e)}")
 
     async def complete_first_login_registration(self, user_id: int, country: str, 
                                         department: str, city: int, 
@@ -463,8 +510,8 @@ class UserService:
             user.email = email
             user.password = hash_password
             user.password_salt = salt
-            user.status_id = 1  # Activo
-
+            user.status_id = 2  
+            user.email_status = False
             pre_register_token.used = True
 
             activation_token = str(uuid.uuid4())
@@ -513,8 +560,9 @@ class UserService:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado. Por favor, contacte al administrador.")
 
             token_obj.used = True
-            if user.status_id is None or user.status_id == 2:
+            if user.status_id is None or user.status_id != 1 and user.email_status==False:
                 user.status_id = 1
+                user.email_status = True
 
             self.db.commit()
 

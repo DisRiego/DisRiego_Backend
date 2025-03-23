@@ -61,18 +61,34 @@ def swagger_login(
 def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     auth_service = AuthService(db)
     
+
     user = auth_service.authenticate_user(user_credentials.email, user_credentials.password)
     if not user:
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     
-    # Recargar el usuario con relaciones
+
+    if not user.email_status:
+        user_service = UserService(db)
+        new_token = user_service.resend_activation_token(user)
+        raise HTTPException(
+            status_code=401, 
+            detail="Cuenta no activada. Se ha reenviado el código de activación a su correo."
+        )
+    
+
+    if user.status_id != 1:
+        raise HTTPException(
+            status_code=401, 
+            detail="Cuenta inactiva o bloqueada. No se permite el acceso."
+        )
+    
+
     user = (
         db.query(User)
         .options(joinedload(User.roles).joinedload(Role.permissions))
         .filter(User.email == user.email)
         .first()
     )
-    
     
     roles = []
     for role in user.roles:
@@ -81,16 +97,15 @@ def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
         role_data["permisos"] = permisos
         roles.append(role_data)
     
-    
     token_data = {
-        "sub": user.email,   
+        "sub": user.email,
         "id": user.id,
         "name": user.name,
         "email": user.email,
         "status_date": datetime.utcnow().isoformat(),
         "rol": roles,
-        "status" : user.status_id,
-        "birthday": user.birthday.isoformat(),
+        "status": user.status_id,
+        "birthday": user.birthday.isoformat() if user.birthday else None,
         "first_login_complete": user.first_login_complete
     }
     

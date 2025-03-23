@@ -34,10 +34,10 @@ async def create_property(
             freedom_tradition_certificate=freedom_tradition_certificate
         )
 
-        return result  # El resultado es devuelto como un diccionario
+        return result  
 
     except HTTPException as e:
-        raise e  # Re-lanzamos la excepción si ya se manejó aquí
+        raise e  
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
@@ -67,17 +67,17 @@ async def search_user_by_document(
 @router.post("/lot/", response_model=dict)
 async def create_lot(
     property_id: int = Form(...),
-    name: str = Form(...),  # Usamos Form para los campos de texto
+    name: str = Form(...),  
     longitude: float = Form(...),
     latitude: float = Form(...),
     extension: float = Form(...),
     real_estate_registration_number: int = Form(...),
-    freedom_tradition_certificate: UploadFile = File(...),  # Archivos obligatorios
+    freedom_tradition_certificate: UploadFile = File(...),  
     public_deed: UploadFile = File(...),
-    db: Session = Depends(get_db)  # Dependencia de la base de datos
+    db: Session = Depends(get_db)  
 ):
     try:
-        # Creamos una instancia del servicio para manejar la lógica
+       
         property_service = PropertyLotService(db)
         result = await property_service.create_lot(
             property_id=property_id,
@@ -87,16 +87,68 @@ async def create_lot(
             extension=extension,
             real_estate_registration_number=real_estate_registration_number,
             public_deed=public_deed,
-            freedom_tradition_certificate=freedom_tradition_certificate
+            freedom_tradition_certificate=freedom_tradition_certificate,
+
         )
 
-        return result  # El resultado es devuelto como un diccionario
+        return result  
 
     except HTTPException as e:
-        raise e  # Re-lanzamos la excepción si ya se manejó aquí
+        raise e  
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
+
+@router.put("/{property_id}/state", response_model=dict)
+def update_property_state(
+    property_id: int,
+    new_state: bool = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambia el state del predio.
+    Si se intenta pasar a false, se valida que no tenga lotes asociados activos.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        updated_property = property_service.update_property_state(property_id, new_state)
+        return {
+            "success": True,
+            "data": {
+                "property_id": updated_property.id,
+                "State": updated_property.State
+            }
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del predio: {str(e)}")
+
+
+@router.put("/lot/{lot_id}/state", response_model=dict)
+def update_lot_state(
+    lot_id: int,
+    new_state: bool = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambia el state del lote (true/false).
+    """
+    try:
+        property_service = PropertyLotService(db)
+        updated_lot = property_service.update_lot_state(lot_id, new_state)
+        return {
+            "success": True,
+            "data": {
+                "lot_id": updated_lot.id,
+                "state": updated_lot.state
+            }
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del lote: {str(e)}")
+
 
 @router.get("/")
 def list_properties(db: Session = Depends(get_db)):
@@ -118,7 +170,7 @@ def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
         lots = property_service.get_lots_property(property_id)
         return lots
     except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
+        raise e  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
     
@@ -130,7 +182,7 @@ def list_lots_properties(user_id: int, db: Session = Depends(get_db)):
         properties = property_service.get_properties_for_user(user_id)
         return properties
     except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
+        raise e  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
     

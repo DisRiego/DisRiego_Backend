@@ -14,24 +14,32 @@ class PropertyLotService:
         self.db = db
 
     def get_all_properties(self):
-        """Obtener todos los predios"""
+        """Obtener todos los predios con el estado y el número de documento del dueño"""
         try:
-            # Realizar la consulta para obtener todos los predios
-            properties = self.db.query(Property).all()
-            if not properties:
+            
+            results = (
+                self.db.query(Property, User.document_number)
+                .join(PropertyUser, Property.id == PropertyUser.property_id)
+                .join(User, PropertyUser.user_id == User.id)
+                .all()
+            )
+            properties_list = []
+            for property_obj, document_number in results:
+                property_dict = jsonable_encoder(property_obj)
+                # Agregar la información adicional
+                property_dict["owner_document_number"] = document_number
+ 
+                properties_list.append(property_dict)
+
+            if not properties_list:
                 return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "data": jsonable_encoder([])
-                    }
+                    status_code=404,
+                    content={"success": False, "data": []}
                 )
+
             return JSONResponse(
                 status_code=200,
-                content={
-                    "success": True,
-                    "data": jsonable_encoder(properties)
-                }
+                content={"success": True, "data": properties_list}
             )
         except Exception as e:
             return JSONResponse(
@@ -40,7 +48,7 @@ class PropertyLotService:
                     "success": False,
                     "data": {
                         "title": "Predios",
-                        "message": f"Error al obtener los predios, Contacta al administrador"
+                        "message": f"Error al obtener los predios, contacta al administrador: {str(e)}"
                     }
                 }
             )
@@ -159,6 +167,71 @@ class PropertyLotService:
                     }
                 }
             )
+        
+
+    def update_property_state(self, property_id: int, new_state: bool):
+ 
+        try:
+            property_obj = self.db.query(Property).filter(Property.id == property_id).first()
+            if not property_obj:
+                raise HTTPException(status_code=404, detail="Predio no encontrado.")
+            
+            # Si se intenta inactivar el predio, verificar que no tenga lotes activos
+            if new_state is False:
+                active_lots = (
+                    self.db.query(Lot)
+                    .join(PropertyLot, PropertyLot.lot_id == Lot.id)
+                    .filter(PropertyLot.property_id == property_id, Lot.state == True)
+                    .all()
+                )
+                if active_lots:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="No se puede inactivar el predio porque tiene lotes activos."
+                    )
+            
+            # Actualizar el state del predio
+            property_obj.State = new_state
+            self.db.commit()
+            self.db.refresh(property_obj)
+            return property_obj
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del predio: {str(e)}")
+
+    def update_lot_state(self, lot_id: int, new_state: bool):
+        """
+        Actualiza el estado (state) de un lote, permitiendo cambiar de true a false y viceversa.
+        Si se intenta activar (new_state == True), se verifica que el predio asociado esté activo.
+        """
+        try:
+            lot_obj = self.db.query(Lot).filter(Lot.id == lot_id).first()
+            if not lot_obj:
+                raise HTTPException(status_code=404, detail="Lote no encontrado.")
+            
+            # Si se intenta activar el lote, verificar que el predio asociado esté activo.
+            if new_state is True:
+                association = self.db.query(PropertyLot).filter(PropertyLot.lot_id == lot_id).first()
+                if not association:
+                    raise HTTPException(status_code=400, detail="No existe asociación del lote con un predio.")
+                property_obj = self.db.query(Property).filter(Property.id == association.property_id).first()
+                if not property_obj:
+                    raise HTTPException(status_code=400, detail="Predio asociado no encontrado.")
+                if property_obj.State is False:
+                    raise HTTPException(status_code=400, detail="No se puede activar el lote porque el predio está desactivado.")
+            
+            lot_obj.state = new_state
+            self.db.commit()
+            self.db.refresh(lot_obj)
+            return lot_obj
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del lote: {str(e)}")
+
     def search_user_by_document(self, document_type: int, document_number: str):
         try:
             user = self.db.query(User).filter(

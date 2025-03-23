@@ -13,6 +13,7 @@ class Property(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
+    State = Column(Boolean, nullable = True)
     # description = Column(Text, nullable=True)
     # location = Column(String, nullable=True)
 
@@ -34,13 +35,12 @@ class Lot(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
-    
     # Nuevos campos
     payment_interval = Column(Integer, nullable=True)
     type_crop_id = Column(Integer, ForeignKey('type_crop.id'), nullable=True)
     planting_date = Column(Date, nullable=True)
     estimated_harvest_date = Column(Date, nullable=True)
-    state = Column("State", Boolean, nullable=True)
+    state = Column("State", Boolean, nullable=True, default = True)
 
     # Relación con TypeCrop
     type_crop = relationship("TypeCrop", back_populates="lots")
