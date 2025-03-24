@@ -9,6 +9,7 @@ from app.property_routes.schemas import PropertyCreate, PropertyResponse
 from app.users.models import User
 from datetime import date
 from app.roles.models import Vars
+from app.firebase_config import bucket
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -158,17 +159,19 @@ class PropertyLotService:
             )
 
         except Exception as e:
-            self.db.rollback()  # Revertir cambios si ocurre algún error
+            self.db.rollback()
+            print("Error al crear predio:", e)
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
                     "data": {
                         "title": "Creacion de predios",
-                        "message": f"Error al crear el predio, Contacta al administrador"
+                        "message": f"Error al crear el predio, Contacta al administrador: {str(e)}"
                     }
                 }
             )
+
         
 
     def update_property_state(self, property_id: int, new_state: bool):
@@ -284,25 +287,27 @@ class PropertyLotService:
             )
 
     async def save_file(self, file: UploadFile, directory: str = "files/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
+        """Guardar un archivo en Firebase Storage y devolver su URL pública"""
         try:
-            # Crear el directorio si no existe
-            if not os.path.exists(directory):
-                os.makedirs(directory)
+            # Leer el contenido del archivo
+            file_content = await file.read()
 
-            # Generar un nombre único para el archivo usando UUID
-            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"  # Usamos el nombre original de la extensión
+            # Generar un nombre único para el archivo usando UUID y conservar la extensión
+            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
 
-            # Guardar el archivo en el directorio con el nombre único
-            file_path = os.path.join(directory, unique_filename)
+            # Crear el blob en el bucket dentro del directorio deseado
+            blob = bucket.blob(f"{directory}/{unique_filename}")
 
-            # Guardar el archivo en el sistema de archivos
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
+            # Subir el contenido del archivo a Firebase Storage
+            blob.upload_from_string(file_content, content_type=file.content_type)
 
-            return file_path  # Devolver la ruta del archivo guardado
+            # (Opcional) Hacer el archivo público para obtener una URL de acceso directo
+            blob.make_public()
+
+            # Retornar la URL pública del archivo
+            return blob.public_url
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo en Firebase: {str(e)}")
 
     async def edit_lot_fields(self, lot_id: int, payment_interval: int, type_crop_id: int, planting_date: date, estimated_harvest_date: date):
         try:
