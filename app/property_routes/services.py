@@ -58,18 +58,20 @@ class PropertyLotService:
                 }
             )
     def get_lot_by_id(self, lot_id: int):
-        """Obtener un lote por su id, incluyendo nombres descriptivos de tipo de cultivo, intervalo de pago y estado."""
+        """Obtener un lote por su id, incluyendo nombres descriptivos y el id del predio vinculado."""
         try:
             result = (
                 self.db.query(
                     Lot,
                     TypeCrop.name.label("nombre_tipo_cultivo"),
                     PaymentInterval.name.label("nombre_intervalo_pago"),
-                    Vars.name.label("nombre_estado")
+                    Vars.name.label("nombre_estado"),
+                    PropertyLot.property_id.label("property_id")
                 )
                 .outerjoin(TypeCrop, Lot.type_crop_id == TypeCrop.id)
                 .outerjoin(PaymentInterval, Lot.payment_interval == PaymentInterval.id)
                 .join(Vars, Lot.state == Vars.id)
+                .join(PropertyLot, PropertyLot.lot_id == Lot.id)
                 .filter(Lot.id == lot_id)
                 .first()
             )
@@ -78,12 +80,12 @@ class PropertyLotService:
                     status_code=404,
                     content={"success": False, "data": "Lote no encontrado"}
                 )
-
-            lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado = result
+            lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado, property_id = result
             lot_data = jsonable_encoder(lot)
             lot_data["nombre_tipo_cultivo"] = nombre_tipo_cultivo
             lot_data["nombre_intervalo_pago"] = nombre_intervalo_pago
             lot_data["nombre_estado"] = nombre_estado
+            lot_data["property_id"] = property_id
 
             return JSONResponse(
                 status_code=200,
@@ -94,6 +96,7 @@ class PropertyLotService:
                 status_code=500,
                 content={"success": False, "data": f"Error al obtener el lote: {str(e)}"}
             )
+
     async def create_property(self,user_id: int,  name: str, longitude: float, latitude: float, extension: float, real_estate_registration_number: int, public_deed: UploadFile = File(...), freedom_tradition_certificate: UploadFile = File(...)):
         """Crear un nuevo predio en la base de datos con la carga de archivos"""
 
