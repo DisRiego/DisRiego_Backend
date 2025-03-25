@@ -17,32 +17,38 @@ import logging
 
 
 class BaseService:
-    """Clase base para servicios con funcionalidades comunes."""
+    """Clase base para servicios con funcionalidades comunes utilizando Firebase Storage."""
 
-    async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
+    async def save_file(self, file: UploadFile, directory: str = "uploads") -> str:
+        """Sube un archivo a Firebase Storage y retorna su URL pública.
+        
+        Se genera un nombre único para evitar conflictos y se sube el contenido del archivo.
+        """
         try:
-            os.makedirs(directory, exist_ok=True)  # Crear directorio si no existe
             unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
-            file_path = os.path.join(directory, unique_filename)
-
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-
-            return file_path
+            blob_path = f"{directory}/{unique_filename}"
+            blob = bucket.blob(blob_path)
+            file_content = await file.read()
+            blob.upload_from_string(file_content, content_type=file.content_type)
+            # Hacer el blob público para obtener una URL accesible (opcional)
+            blob.make_public()
+            return blob.public_url  # Retorna la URL pública del archivo
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al subir el archivo a Firebase: {str(e)}")
 
-    def delete_file(self, file_path: str):
-        """Eliminar un archivo del servidor"""
+    def delete_file(self, file_identifier: str):
+        """Elimina un archivo de Firebase Storage.
+        
+        Se asume que en la base de datos se guarda el blob_path o blob.name.
+        """
         try:
-            if file_path and os.path.exists(file_path):
-                os.remove(file_path)
+            blob = bucket.blob(file_identifier)
+            blob.delete()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al eliminar el archivo: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al eliminar el archivo de Firebase: {str(e)}")
         
 
-class CompanyService:
+class CompanyService(BaseService):
     """Servicio para la gestión de la información de la empresa"""
     
     def __init__(self, db: Session):
@@ -486,7 +492,7 @@ class ColorPaletteService:
                 }
             )
 
-class CertificateService:
+class CertificateService(BaseService):
     """Servicio para la gestión de certificados digitales"""
     
     def __init__(self, db: Session):
