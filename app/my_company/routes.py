@@ -269,6 +269,21 @@ def create_type_crop(
     type_service = services.TypeCropService(db)
     return type_service.create_type(type_crop)
 
+
+@router.patch("/type-crops/{type_id}/state", summary="Actualizar estado del tipo de cultivo")
+def update_type_crop_state(
+    type_id: int,
+    new_state: int = Form(...),  # Espera 20 (activo) o 21 (inactivo)
+    db: Session = Depends(get_db)
+):
+    """
+    Actualiza el estado (activo/inactivo) de un tipo de cultivo.
+    El parámetro new_state debe ser 20 (activo) o 21 (inactivo).
+    """
+    type_service = services.TypeCropService(db)
+    return type_service.update_state(type_id, new_state)
+
+
 @router.put("/type-crops/{type_id}", summary="Actualizar un tipo de cultivo")
 def update_type_crop(
     type_id: int,

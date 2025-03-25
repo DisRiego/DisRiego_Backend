@@ -735,14 +735,16 @@ class PropertyLotService:
             )
         
     def get_property_by_id(self, property_id: int):
-        """Obtener la información de un predio específico por su ID, incluyendo el estado y el documento del dueño."""
+        """Obtener la información de un predio específico por su ID, incluyendo el estado, el documento y el id del dueño."""
         try:
-            # Realizamos un join similar a get_all_properties para obtener información adicional
+            # Realizamos un join similar a get_all_properties para obtener información adicional,
+            # incluyendo el id del dueño (User.id)
             result = (
                 self.db.query(
                     Property,
                     Vars.name.label("state_name"),
-                    User.document_number.label("owner_document_number")
+                    User.document_number.label("owner_document_number"),
+                    User.id.label("owner_id")
                 )
                 .join(PropertyUser, Property.id == PropertyUser.property_id)
                 .join(User, PropertyUser.user_id == User.id)
@@ -755,10 +757,11 @@ class PropertyLotService:
                     status_code=404,
                     content={"success": False, "data": "Predio no encontrado"}
                 )
-            property_obj, state_name, owner_document_number = result
+            property_obj, state_name, owner_document_number, owner_id = result
             property_dict = jsonable_encoder(property_obj)
             property_dict["state_name"] = state_name
             property_dict["owner_document_number"] = owner_document_number
+            property_dict["owner_id"] = owner_id
 
             return JSONResponse(
                 status_code=200,

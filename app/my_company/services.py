@@ -711,6 +711,52 @@ class TypeCropService:
     def __init__(self, db: Session):
         self.db = db
     
+    def update_state(self, type_id: int, new_state: int):
+        """
+        Actualiza el estado de un tipo de cultivo.
+        Se espera que new_state sea 20 (activo) o 21 (inactivo).
+        """
+        if new_state not in (20, 21):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "El estado debe ser 20 (activo) o 21 (inactivo)",
+                    "data": None
+                }
+            )
+        try:
+            type_crop = self.db.query(TypeCrop).filter(TypeCrop.id == type_id).first()
+            if not type_crop:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "message": "Tipo de cultivo no encontrado",
+                        "data": None
+                    }
+                )
+            type_crop.state_id = new_state
+            self.db.commit()
+            self.db.refresh(type_crop)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "message": "Estado del tipo de cultivo actualizado correctamente",
+                    "data": jsonable_encoder(type_crop)
+                }
+            )
+        except Exception as e:
+            self.db.rollback()
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": f"Error al actualizar el estado del tipo de cultivo: {str(e)}",
+                    "data": None
+                }
+            )
     def get_all_types(self):
         """Obtener todos los tipos de cultivo"""
         try:
