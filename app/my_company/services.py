@@ -11,8 +11,44 @@ from app.my_company.models import (
     CompanyCertificate, TypeCrop, PaymentInterval, CompanyUser
 )
 from app.my_company import schemas
+from app.firebase_config import bucket
+import logging
 
-class CompanyService:
+
+
+class BaseService:
+    """Clase base para servicios con funcionalidades comunes utilizando Firebase Storage."""
+
+    async def save_file(self, file: UploadFile, directory: str = "uploads") -> str:
+        """Sube un archivo a Firebase Storage y retorna su URL pública.
+        
+        Se genera un nombre único para evitar conflictos y se sube el contenido del archivo.
+        """
+        try:
+            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+            blob_path = f"{directory}/{unique_filename}"
+            blob = bucket.blob(blob_path)
+            file_content = await file.read()
+            blob.upload_from_string(file_content, content_type=file.content_type)
+            # Hacer el blob público para obtener una URL accesible (opcional)
+            blob.make_public()
+            return blob.public_url  # Retorna la URL pública del archivo
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al subir el archivo a Firebase: {str(e)}")
+
+    def delete_file(self, file_identifier: str):
+        """Elimina un archivo de Firebase Storage.
+        
+        Se asume que en la base de datos se guarda el blob_path o blob.name.
+        """
+        try:
+            blob = bucket.blob(file_identifier)
+            blob.delete()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error al eliminar el archivo de Firebase: {str(e)}")
+        
+
+class CompanyService(BaseService):
     """Servicio para la gestión de la información de la empresa"""
     
     def __init__(self, db: Session):
@@ -50,12 +86,38 @@ class CompanyService:
             )
     
 
+    async def update_company_logo(self, logo_file: UploadFile):
+        """Actualiza únicamente la foto/imagen (logo) de la empresa."""
+        # Obtener la empresa registrada
+        company = self.db.query(Company).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="No existe información de empresa registrada")
+        
+        # Si la empresa tiene un logo anterior, eliminarlo del Firebase Storage
+        if company.logo:
+            try:
+                self.delete_file(company.logo)
+            except Exception as e:
+                # Puedes optar por continuar si falla la eliminación
+                logging.warning(f"No se pudo eliminar el logo anterior: {str(e)}")
+        
+        # Guardar el nuevo logo en Firebase Storage (el método save_file se actualizó para Firebase)
+        new_logo_url = await self.save_file(logo_file, "uploads/logos")
+        company.logo = new_logo_url
+        self.db.commit()
+        self.db.refresh(company)
+        
+        return {
+            "success": True,
+            "message": "Logo actualizado correctamente",
+            "data": new_logo_url
+        }
     
     async def create_company_info(self, company_data, logo_file, digital_certificate_id: int):
         try:
             # Guardar el logo y actualizar company_data.logo
             if logo_file:
-                logo_path = await self.save_file(logo_file, "uploads/logos/")
+                logo_path = await self.save_file(logo_file, "uploads/logos")
                 company_data.logo = logo_path
             else:
                 company_data.logo = ""
@@ -238,26 +300,7 @@ class CompanyService:
 
 
     
-    async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
-        try:
-            # Crear el directorio si no existe
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-
-            # Generar un nombre único para el archivo
-            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
-            
-            # Ruta completa del archivo
-            file_path = os.path.join(directory, unique_filename)
-            
-            # Guardar el archivo
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-            
-            return file_path
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+    
 
 class ColorPaletteService:
     """Servicio para la gestión de paletas de colores"""
@@ -449,7 +492,7 @@ class ColorPaletteService:
                 }
             )
 
-class CertificateService:
+class CertificateService(BaseService):
     """Servicio para la gestión de certificados digitales"""
     
     def __init__(self, db: Session):
@@ -476,6 +519,8 @@ class CertificateService:
                     "data": None
                 }
             )
+        
+    
     
     async def get_certificate(self, certificate_id: int):
         """Obtener un certificado digital por su ID"""
@@ -556,26 +601,6 @@ class CertificateService:
                 }
             )
     
-    async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
-        try:
-            # Crear el directorio si no existe
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-            
-            # Generar un nombre único para el archivo
-            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
-            
-            # Ruta completa del archivo
-            file_path = os.path.join(directory, unique_filename)
-            
-            # Guardar el archivo
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-            
-            return file_path
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
     async def update_certificate(self, certificate_id: int, certificate_data, certificate_file: UploadFile = None):
         """Actualizar un certificado digital existente"""
@@ -679,26 +704,6 @@ class CertificateService:
                 }
             )
     
-    async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
-        try:
-            # Crear el directorio si no existe
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-
-            # Generar un nombre único para el archivo
-            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
-            
-            # Ruta completa del archivo
-            file_path = os.path.join(directory, unique_filename)
-            
-            # Guardar el archivo
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-            
-            return file_path
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
 
 class TypeCropService:
     """Servicio para gestionar tipos de cultivo"""
