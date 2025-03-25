@@ -218,21 +218,25 @@ def get_lot_by_id(lot_id: int, db: Session = Depends(get_db)):
     
 
 @router.put("/lot/{lot_id}", response_model=dict)
-async def update_lot(lot_id: int,
+async def update_lot(
+    lot_id: int,
     name: str = Form(...),
     longitude: float = Form(...),
     latitude: float = Form(...),
     extension: float = Form(...),
     real_estate_registration_number: int = Form(...),
-    public_deed: UploadFile = File(None), freedom_tradition_certificate: UploadFile = File(None), db: Session = Depends(get_db)):
+    public_deed: UploadFile = File(None),  
+    freedom_tradition_certificate: UploadFile = File(None),  
+    db: Session = Depends(get_db)
+):
     property_service = PropertyLotService(db)
     return await property_service.edit_lot(
         lot_id=lot_id,
         name=name,
-        longitude = longitude,
-        latitude = latitude,
-        extension = extension,
-        real_estate_registration_number = real_estate_registration_number,
+        longitude=longitude,
+        latitude=latitude,
+        extension=extension,
+        real_estate_registration_number=real_estate_registration_number,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
     )

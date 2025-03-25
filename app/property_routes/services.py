@@ -574,12 +574,10 @@ class PropertyLotService:
 
 
     async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
-                   real_estate_registration_number: int, public_deed: UploadFile = File(None), 
+                    real_estate_registration_number: int, public_deed: UploadFile = File(None), 
                     freedom_tradition_certificate: UploadFile = File(None)):
-        """Editar un lote existente en la base de datos con la posibilidad de actualizar archivos"""
-
+        """Editar un lote existente en la base de datos con la posibilidad de actualizar archivos opcionales"""
         try:
-            # Verificar si el lote existe
             lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
             if not lot:
                 return JSONResponse(
@@ -593,24 +591,6 @@ class PropertyLotService:
                     }
                 )
             
-            # Verificar si el número de registro de propiedad es único, pero no en el lote actual
-            existing_lot = self.db.query(Lot) \
-                .filter(Lot.real_estate_registration_number == str(real_estate_registration_number)) \
-                .filter(Lot.id != lot_id) \
-                .first()
-
-            if existing_lot:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "data": {
-                            "title": "Edición de lote",
-                            "message": "El número de registro del lote ya existe en otro lote"
-                        }
-                    }
-                )
-
             # Actualizar la información del lote
             lot.name = name
             lot.longitude = longitude
@@ -618,7 +598,7 @@ class PropertyLotService:
             lot.extension = extension
             lot.real_estate_registration_number = real_estate_registration_number
             
-            # Si los archivos se proporcionan, los actualizamos
+            # Actualizar archivos si se proporcionan
             if public_deed:
                 public_deed_path = await self.save_file(public_deed, "uploads/files_lots/")
                 lot.public_deed = public_deed_path
@@ -627,7 +607,6 @@ class PropertyLotService:
                 freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate, "uploads/files_lots/")
                 lot.freedom_tradition_certificate = freedom_tradition_certificate_path
 
-            # Guardar los cambios en la base de datos
             self.db.commit()
             self.db.refresh(lot)
 
@@ -643,7 +622,7 @@ class PropertyLotService:
             )
 
         except Exception as e:
-            self.db.rollback()  # Revertir cambios si ocurre algún error
+            self.db.rollback()
             return JSONResponse(
                 status_code=500,
                 content={
