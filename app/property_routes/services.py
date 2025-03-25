@@ -10,6 +10,8 @@ from app.users.models import User
 from datetime import date
 from app.roles.models import Vars
 from app.firebase_config import bucket
+from app.my_company.models import TypeCrop, PaymentInterval
+
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -475,25 +477,47 @@ class PropertyLotService:
             )        
 
     def get_lots_property(self, property_id: int):
-        """Obtener todos los lotes de un predio"""
+        """Obtener todos los lotes de un predio incluyendo los nombres descriptivos"""
         try:
-            # Realizar la consulta para obtener todos los lotes de un predio
-            lots = self.db.query(Lot).join(PropertyLot, PropertyLot.lot_id == Lot.id).filter(PropertyLot.property_id == property_id).all()
-            
+            lots = (
+                self.db.query(
+                    Lot,
+                    TypeCrop.name.label("nombre_tipo_cultivo"),
+                    PaymentInterval.name.label("nombre_intervalo_pago"),
+                    Vars.name.label("nombre_estado")
+                )
+                .join(PropertyLot, PropertyLot.lot_id == Lot.id)
+                # Usamos outerjoin en caso de que algún lote no tenga asignado tipo de cultivo o intervalo de pago
+                .outerjoin(TypeCrop, Lot.type_crop_id == TypeCrop.id)
+                .outerjoin(PaymentInterval, Lot.payment_interval == PaymentInterval.id)
+                .join(Vars, Lot.state == Vars.id)
+                .filter(PropertyLot.property_id == property_id)
+                .all()
+            )
+
             if not lots:
                 return JSONResponse(
                     status_code=404,
                     content={
                         "success": False,
-                        "data": jsonable_encoder([])
+                        "data": []
                     }
                 )
+
+            # Convertir resultados a una lista de diccionarios
+            results = []
+            for lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado in lots:
+                lot_data = jsonable_encoder(lot)
+                lot_data["nombre_tipo_cultivo"] = nombre_tipo_cultivo
+                lot_data["nombre_intervalo_pago"] = nombre_intervalo_pago
+                lot_data["nombre_estado"] = nombre_estado
+                results.append(lot_data)
 
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
-                    "data": jsonable_encoder(lots)
+                    "data": results
                 }
             )
 
@@ -508,6 +532,7 @@ class PropertyLotService:
                     }
                 }
             )
+
 
     async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
                    real_estate_registration_number: int, public_deed: UploadFile = File(None), 
