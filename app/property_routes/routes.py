@@ -99,6 +99,19 @@ async def create_lot(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
 
+@router.get("/{property_id}", response_model=dict)
+def get_property(property_id: int, db: Session = Depends(get_db)):
+    """
+    Obtener la información de un predio específico por su ID.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.get_property_by_id(property_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el predio: {str(e)}")
+    
 @router.put("/{property_id}/state", response_model=dict)
 def update_property_state(
     property_id: int,
@@ -166,6 +179,8 @@ def list_properties(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los predios: {str(e)}")
     
+
+
 @router.get("/{property_id}/lots/")
 def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
     """Obtener todos los lotes de un predio"""
@@ -189,7 +204,7 @@ def list_lots_properties(user_id: int, db: Session = Depends(get_db)):
         raise e  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
-    
+ 
 @router.put("/lot/{lot_id}", response_model=dict)
 async def update_lot(lot_id: int,
     name: str = Form(...),

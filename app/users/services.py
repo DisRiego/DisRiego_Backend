@@ -17,6 +17,8 @@ from fastapi.security import OAuth2PasswordBearer
 from app.auth.services import SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from fastapi.responses import JSONResponse
+from app.firebase_config import bucket
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -32,35 +34,22 @@ class UserService:
 
     async def save_profile_picture(self, file: UploadFile) -> str:
         """
-        Guarda una imagen de perfil en el servidor con un nombre único
-
-        Args:
-            file: El archivo de imagen subido
-
-        Returns:
-            La ruta donde se guardó la imagen
+        Guarda la imagen de perfil en Firebase Storage con un nombre único
+        y retorna la URL pública del archivo.
         """
         try:
-            # Crear directorio si no existe
+            file_content = await file.read()
+            unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
             directory = "uploads/profile_pictures/"
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-
-            # Generar nombre único
-            file_extension = os.path.splitext(file.filename)[1]
-            unique_filename = f"{uuid.uuid4()}{file_extension}"
-            file_path = os.path.join(directory, unique_filename)
-
-            # Guardar el archivo
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
-
-            return file_path
+            if not directory.endswith("/"):
+                directory += "/"
+            blob = bucket.blob(f"{directory}{unique_filename}")
+            blob.upload_from_string(file_content, content_type=file.content_type)
+            blob.make_public()
+            return blob.public_url
         except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al guardar la imagen de perfil: {str(e)}"
-            )
+            raise HTTPException(status_code=500, detail=f"Error al guardar la imagen de perfil en Firebase: {str(e)}")
+        
     def resend_activation_token(self, user: User) -> str:
         """
         Invalida los tokens de activación previos para el usuario y genera uno nuevo.

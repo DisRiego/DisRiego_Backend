@@ -11,6 +11,8 @@ from app.my_company.models import (
     CompanyCertificate, TypeCrop, PaymentInterval, CompanyUser
 )
 from app.my_company import schemas
+from app.firebase_config import bucket
+
 
 class CompanyService:
     """Servicio para la gestión de la información de la empresa"""
@@ -55,7 +57,7 @@ class CompanyService:
         try:
             # Guardar el logo y actualizar company_data.logo
             if logo_file:
-                logo_path = await self.save_file(logo_file, "uploads/logos/")
+                logo_path = await self.save_file(logo_file, "uploads/logos")
                 company_data.logo = logo_path
             else:
                 company_data.logo = ""
@@ -239,25 +241,30 @@ class CompanyService:
 
     
     async def save_file(self, file: UploadFile, directory: str = "uploads/") -> str:
-        """Guardar un archivo en el servidor con un nombre único"""
+        """Guardar un archivo en Firebase Storage con un nombre único y retornar la URL pública"""
         try:
-            # Crear el directorio si no existe
-            if not os.path.exists(directory):
-                os.makedirs(directory)
-
-            # Generar un nombre único para el archivo
+            # Leer el contenido del archivo
+            file_content = await file.read()
+            
+            # Generar un nombre único, manteniendo la extensión original
             unique_filename = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
             
-            # Ruta completa del archivo
-            file_path = os.path.join(directory, unique_filename)
+            # Asegurar que el directorio termina en "/"
+            if not directory.endswith("/"):
+                directory += "/"
             
-            # Guardar el archivo
-            with open(file_path, "wb") as buffer:
-                buffer.write(await file.read())
+            # Crear el blob en el bucket en la ruta especificada
+            blob = bucket.blob(f"{directory}{unique_filename}")
             
-            return file_path
+            # Subir el contenido del archivo a Firebase Storage
+            blob.upload_from_string(file_content, content_type=file.content_type)
+            
+            # Hacer público el blob para obtener la URL de acceso
+            blob.make_public()
+            
+            return blob.public_url
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al guardar el archivo en Firebase: {str(e)}")
 
 class ColorPaletteService:
     """Servicio para la gestión de paletas de colores"""

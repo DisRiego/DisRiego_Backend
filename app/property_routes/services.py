@@ -733,3 +733,39 @@ class PropertyLotService:
                     }
                 }
             )
+        
+    def get_property_by_id(self, property_id: int):
+        """Obtener la información de un predio específico por su ID, incluyendo el estado y el documento del dueño."""
+        try:
+            # Realizamos un join similar a get_all_properties para obtener información adicional
+            result = (
+                self.db.query(
+                    Property,
+                    Vars.name.label("state_name"),
+                    User.document_number.label("owner_document_number")
+                )
+                .join(PropertyUser, Property.id == PropertyUser.property_id)
+                .join(User, PropertyUser.user_id == User.id)
+                .join(Vars, Property.state == Vars.id)
+                .filter(Property.id == property_id)
+                .first()
+            )
+            if not result:
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "data": "Predio no encontrado"}
+                )
+            property_obj, state_name, owner_document_number = result
+            property_dict = jsonable_encoder(property_obj)
+            property_dict["state_name"] = state_name
+            property_dict["owner_document_number"] = owner_document_number
+
+            return JSONResponse(
+                status_code=200,
+                content={"success": True, "data": property_dict}
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "data": f"Error al obtener la información del predio: {str(e)}"}
+            )
