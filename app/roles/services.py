@@ -168,20 +168,23 @@ class RoleService:
             for role in roles:
                 # Procesar la cadena de permisos
                 permissions = []
-                if role.permissions and isinstance(role.permissions, str):  # Verifica que no sea None y sea string
-                    permission_list = [p for p in role.permissions.split(',') if ':::::' in p]  # Filtra permisos válidos
+                if role.permissions:
+                    # Split by comma and extract ID, Name and Description for each permission
+                    for permission_str in role.permissions.split(','):
+                        if ':::::' not in permission_str:
+                            continue  # Saltar valores incorrectos
 
-                    for permission_str in permission_list:
-                        try:
-                            perm_id, perm_name, perm_description = permission_str.split(':::::')
-                            permissions.append({
-                                "id": int(perm_id.strip()),  # Asegura que el ID sea un entero válido
-                                "name": perm_name.strip(),
-                                "description": perm_description.strip()
-                            })
-                        except (ValueError, IndexError):
-                            continue  # Si hay error, omitir y continuar con el siguiente permiso
-                        
+                        parts = permission_str.split(':::::')
+                        if len(parts) != 3:
+                            continue  # Evitar errores si no hay exactamente 3 partes
+
+                        perm_id, perm_name, perm_description = parts
+                        permissions.append({
+                            "id": int(perm_id),
+                            "name": perm_name,
+                            "description": perm_description
+                        })
+
                 # Construir el diccionario con los detalles del rol
                 role_data = {
                     "role_id": role.role_id,
@@ -217,28 +220,28 @@ class RoleService:
                 "title" : f"Contacta con el administrador",
                 "message" : str(e),
             }})
-    
+
     def change_role_status(self, role_id: int, new_status: int):
         """Cambiar el estado de un rol"""
         try:
             role = self.db.query(models.Role).filter(models.Role.id == role_id).first()
             if not role:
                 raise HTTPException(status_code=404, detail="Rol no encontrado.")
-
+            
+            # Verifica si el estado proporcionado existe en la tabla StatusUser
             status = self.db.query(models.Vars).filter(models.Vars.id == new_status).first()
             if not status:
-                raise HTTPException(status_code=400, detail="Estado no encontrado.")
+                raise HTTPException(status_code=400, detail="Estado no válido.")
 
+            # Cambiar el estado del rol
             role.status = new_status
             self.db.commit()
             self.db.refresh(role)
 
             return {"success": True, "data": "Estado de rol actualizado correctamente."}
-        except HTTPException:
-            raise
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error inesperado al actualizar el estado del rol: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del rol: {str(e)}")
         
 
         
