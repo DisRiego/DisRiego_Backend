@@ -347,3 +347,11 @@ def delete_payment_interval(
     """
     interval_service = services.PaymentIntervalService(db)
     return interval_service.delete_interval(interval_id)
+
+@router.patch("/company/logo", summary="Actualizar foto/imagen de la empresa")
+async def update_company_logo(
+    logo: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    company_service = services.CompanyService(db)
+    return await company_service.update_company_logo(logo)

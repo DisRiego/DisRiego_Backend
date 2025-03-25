@@ -12,6 +12,7 @@ from app.my_company.models import (
 )
 from app.my_company import schemas
 from app.firebase_config import bucket
+import logging
 
 
 
@@ -79,6 +80,32 @@ class CompanyService:
             )
     
 
+    async def update_company_logo(self, logo_file: UploadFile):
+        """Actualiza únicamente la foto/imagen (logo) de la empresa."""
+        # Obtener la empresa registrada
+        company = self.db.query(Company).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="No existe información de empresa registrada")
+        
+        # Si la empresa tiene un logo anterior, eliminarlo del Firebase Storage
+        if company.logo:
+            try:
+                self.delete_file(company.logo)
+            except Exception as e:
+                # Puedes optar por continuar si falla la eliminación
+                logging.warning(f"No se pudo eliminar el logo anterior: {str(e)}")
+        
+        # Guardar el nuevo logo en Firebase Storage (el método save_file se actualizó para Firebase)
+        new_logo_url = await self.save_file(logo_file, "uploads/logos")
+        company.logo = new_logo_url
+        self.db.commit()
+        self.db.refresh(company)
+        
+        return {
+            "success": True,
+            "message": "Logo actualizado correctamente",
+            "data": new_logo_url
+        }
     
     async def create_company_info(self, company_data, logo_file, digital_certificate_id: int):
         try:
