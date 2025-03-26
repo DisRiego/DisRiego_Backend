@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, TIMESTA
 from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
+from app.roles.models import Vars
 
 class ColorPalette(Base):
     """Modelo para almacenar paletas de colores"""
@@ -81,14 +82,16 @@ class TypeCrop(Base):
     name = Column(String(128), nullable=False)
     harvest_time = Column(Integer, nullable=False)
     payment_interval_id = Column(Integer, ForeignKey("payment_interval.id"), nullable=False)
+    # Nueva columna que relaciona con la tabla vars:
+    state_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=20)
     
-    # Relación con PaymentInterval
+    # Relaciones
     payment_interval = relationship("PaymentInterval")
+    state = relationship("Vars")
     lots = relationship("Lot", back_populates="type_crop")
 
-    
     def __repr__(self):
-        return f"<TypeCrop(id={self.id}, name={self.name})>"
+        return f"<TypeCrop(id={self.id}, name={self.name}, state_id={self.state_id})>"
 
 class PaymentInterval(Base):
     """Modelo para almacenar intervalos de pago"""
@@ -109,9 +112,7 @@ class CompanyUser(Base):
     company_id = Column(Integer, ForeignKey("company.id"))
     user_id = Column(Integer, ForeignKey("users.id"))
     
-
     company = relationship("Company")
-
     
     def __repr__(self):
         return f"<CompanyUser(company_id={self.company_id}, user_id={self.user_id})>"

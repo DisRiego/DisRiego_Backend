@@ -204,23 +204,39 @@ def list_lots_properties(user_id: int, db: Session = Depends(get_db)):
         raise e  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
- 
+
+@router.get("/lot/{lot_id}", response_model=dict)
+def get_lot_by_id(lot_id: int, db: Session = Depends(get_db)):
+    """Obtener los datos de un lote por su id, incluyendo el id del predio vinculado."""
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.get_lot_by_id(lot_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el lote: {str(e)}")
+    
+
 @router.put("/lot/{lot_id}", response_model=dict)
-async def update_lot(lot_id: int,
+async def update_lot(
+    lot_id: int,
     name: str = Form(...),
     longitude: float = Form(...),
     latitude: float = Form(...),
     extension: float = Form(...),
     real_estate_registration_number: int = Form(...),
-    public_deed: UploadFile = File(None), freedom_tradition_certificate: UploadFile = File(None), db: Session = Depends(get_db)):
+    public_deed: UploadFile = File(None),  
+    freedom_tradition_certificate: UploadFile = File(None),  
+    db: Session = Depends(get_db)
+):
     property_service = PropertyLotService(db)
     return await property_service.edit_lot(
         lot_id=lot_id,
         name=name,
-        longitude = longitude,
-        latitude = latitude,
-        extension = extension,
-        real_estate_registration_number = real_estate_registration_number,
+        longitude=longitude,
+        latitude=latitude,
+        extension=extension,
+        real_estate_registration_number=real_estate_registration_number,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
     )

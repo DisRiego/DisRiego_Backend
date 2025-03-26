@@ -10,6 +10,8 @@ from app.users.models import User
 from datetime import date
 from app.roles.models import Vars
 from app.firebase_config import bucket
+from app.my_company.models import TypeCrop, PaymentInterval
+
 
 class PropertyLotService:
     def __init__(self, db: Session):
@@ -54,6 +56,45 @@ class PropertyLotService:
                         "message": f"Error al obtener los predios, contacta al administrador: {str(e)}"
                     }
                 }
+            )
+    def get_lot_by_id(self, lot_id: int):
+        """Obtener un lote por su id, incluyendo nombres descriptivos y el id del predio vinculado."""
+        try:
+            result = (
+                self.db.query(
+                    Lot,
+                    TypeCrop.name.label("nombre_tipo_cultivo"),
+                    PaymentInterval.name.label("nombre_intervalo_pago"),
+                    Vars.name.label("nombre_estado"),
+                    PropertyLot.property_id.label("property_id")
+                )
+                .outerjoin(TypeCrop, Lot.type_crop_id == TypeCrop.id)
+                .outerjoin(PaymentInterval, Lot.payment_interval == PaymentInterval.id)
+                .join(Vars, Lot.state == Vars.id)
+                .join(PropertyLot, PropertyLot.lot_id == Lot.id)
+                .filter(Lot.id == lot_id)
+                .first()
+            )
+            if not result:
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "data": "Lote no encontrado"}
+                )
+            lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado, property_id = result
+            lot_data = jsonable_encoder(lot)
+            lot_data["nombre_tipo_cultivo"] = nombre_tipo_cultivo
+            lot_data["nombre_intervalo_pago"] = nombre_intervalo_pago
+            lot_data["nombre_estado"] = nombre_estado
+            lot_data["property_id"] = property_id
+
+            return JSONResponse(
+                status_code=200,
+                content={"success": True, "data": lot_data}
+            )
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "data": f"Error al obtener el lote: {str(e)}"}
             )
 
     async def create_property(self,user_id: int,  name: str, longitude: float, latitude: float, extension: float, real_estate_registration_number: int, public_deed: UploadFile = File(...), freedom_tradition_certificate: UploadFile = File(...)):
@@ -475,25 +516,47 @@ class PropertyLotService:
             )        
 
     def get_lots_property(self, property_id: int):
-        """Obtener todos los lotes de un predio"""
+        """Obtener todos los lotes de un predio incluyendo los nombres descriptivos"""
         try:
-            # Realizar la consulta para obtener todos los lotes de un predio
-            lots = self.db.query(Lot).join(PropertyLot, PropertyLot.lot_id == Lot.id).filter(PropertyLot.property_id == property_id).all()
-            
+            lots = (
+                self.db.query(
+                    Lot,
+                    TypeCrop.name.label("nombre_tipo_cultivo"),
+                    PaymentInterval.name.label("nombre_intervalo_pago"),
+                    Vars.name.label("nombre_estado")
+                )
+                .join(PropertyLot, PropertyLot.lot_id == Lot.id)
+                # Usamos outerjoin en caso de que algún lote no tenga asignado tipo de cultivo o intervalo de pago
+                .outerjoin(TypeCrop, Lot.type_crop_id == TypeCrop.id)
+                .outerjoin(PaymentInterval, Lot.payment_interval == PaymentInterval.id)
+                .join(Vars, Lot.state == Vars.id)
+                .filter(PropertyLot.property_id == property_id)
+                .all()
+            )
+
             if not lots:
                 return JSONResponse(
                     status_code=404,
                     content={
                         "success": False,
-                        "data": jsonable_encoder([])
+                        "data": []
                     }
                 )
+
+            # Convertir resultados a una lista de diccionarios
+            results = []
+            for lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado in lots:
+                lot_data = jsonable_encoder(lot)
+                lot_data["nombre_tipo_cultivo"] = nombre_tipo_cultivo
+                lot_data["nombre_intervalo_pago"] = nombre_intervalo_pago
+                lot_data["nombre_estado"] = nombre_estado
+                results.append(lot_data)
 
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
-                    "data": jsonable_encoder(lots)
+                    "data": results
                 }
             )
 
@@ -509,13 +572,12 @@ class PropertyLotService:
                 }
             )
 
-    async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
-                   real_estate_registration_number: int, public_deed: UploadFile = File(None), 
-                    freedom_tradition_certificate: UploadFile = File(None)):
-        """Editar un lote existente en la base de datos con la posibilidad de actualizar archivos"""
 
+    async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
+                    real_estate_registration_number: int, public_deed: UploadFile = File(None), 
+                    freedom_tradition_certificate: UploadFile = File(None)):
+        """Editar un lote existente en la base de datos con la posibilidad de actualizar archivos opcionales"""
         try:
-            # Verificar si el lote existe
             lot = self.db.query(Lot).filter(Lot.id == lot_id).first()
             if not lot:
                 return JSONResponse(
@@ -529,24 +591,6 @@ class PropertyLotService:
                     }
                 )
             
-            # Verificar si el número de registro de propiedad es único, pero no en el lote actual
-            existing_lot = self.db.query(Lot) \
-                .filter(Lot.real_estate_registration_number == str(real_estate_registration_number)) \
-                .filter(Lot.id != lot_id) \
-                .first()
-
-            if existing_lot:
-                return JSONResponse(
-                    status_code=400,
-                    content={
-                        "success": False,
-                        "data": {
-                            "title": "Edición de lote",
-                            "message": "El número de registro del lote ya existe en otro lote"
-                        }
-                    }
-                )
-
             # Actualizar la información del lote
             lot.name = name
             lot.longitude = longitude
@@ -554,7 +598,7 @@ class PropertyLotService:
             lot.extension = extension
             lot.real_estate_registration_number = real_estate_registration_number
             
-            # Si los archivos se proporcionan, los actualizamos
+            # Actualizar archivos si se proporcionan
             if public_deed:
                 public_deed_path = await self.save_file(public_deed, "uploads/files_lots/")
                 lot.public_deed = public_deed_path
@@ -563,7 +607,6 @@ class PropertyLotService:
                 freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate, "uploads/files_lots/")
                 lot.freedom_tradition_certificate = freedom_tradition_certificate_path
 
-            # Guardar los cambios en la base de datos
             self.db.commit()
             self.db.refresh(lot)
 
@@ -579,7 +622,7 @@ class PropertyLotService:
             )
 
         except Exception as e:
-            self.db.rollback()  # Revertir cambios si ocurre algún error
+            self.db.rollback()
             return JSONResponse(
                 status_code=500,
                 content={
@@ -735,14 +778,16 @@ class PropertyLotService:
             )
         
     def get_property_by_id(self, property_id: int):
-        """Obtener la información de un predio específico por su ID, incluyendo el estado y el documento del dueño."""
+        """Obtener la información de un predio específico por su ID, incluyendo el estado, el documento y el id del dueño."""
         try:
-            # Realizamos un join similar a get_all_properties para obtener información adicional
+            # Realizamos un join similar a get_all_properties para obtener información adicional,
+            # incluyendo el id del dueño (User.id)
             result = (
                 self.db.query(
                     Property,
                     Vars.name.label("state_name"),
-                    User.document_number.label("owner_document_number")
+                    User.document_number.label("owner_document_number"),
+                    User.id.label("owner_id")
                 )
                 .join(PropertyUser, Property.id == PropertyUser.property_id)
                 .join(User, PropertyUser.user_id == User.id)
@@ -755,10 +800,11 @@ class PropertyLotService:
                     status_code=404,
                     content={"success": False, "data": "Predio no encontrado"}
                 )
-            property_obj, state_name, owner_document_number = result
+            property_obj, state_name, owner_document_number, owner_id = result
             property_dict = jsonable_encoder(property_obj)
             property_dict["state_name"] = state_name
             property_dict["owner_document_number"] = owner_document_number
+            property_dict["owner_id"] = owner_id
 
             return JSONResponse(
                 status_code=200,

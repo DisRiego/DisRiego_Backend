@@ -31,7 +31,7 @@ class Lot(Base):
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
     
-    payment_interval = Column(Integer, nullable=True)
+    payment_interval = Column(Integer, ForeignKey("payment_interval.id"), nullable=True)
     type_crop_id = Column(Integer, ForeignKey('type_crop.id'), nullable=True)
     planting_date = Column(Date, nullable=True)
     estimated_harvest_date = Column(Date, nullable=True)
