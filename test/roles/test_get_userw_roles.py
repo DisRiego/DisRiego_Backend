@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import text
 from app.database import SessionLocal
 from app.roles.services import UserRoleService
-from app.roles.models import Role, Permission
+from app.roles.models import Role, Permission, Vars
 from app.users.models import User
 import uuid
 
@@ -15,26 +15,32 @@ def db():
     created_user_ids = []
     created_role_ids = []
     created_permission_ids = []
+    created_status_ids = []
 
-    yield db, created_user_ids, created_role_ids, created_permission_ids  # Proporciona la sesión y listas de IDs creados   
+    # 🔹 Verificar si el estado 1 existe en `vars`, si no, crearlo
+    status = db.query(Vars).filter_by(id=1).first()
+    if not status:
+        status = Vars(id=1, name="Activo", type="status")
+        db.add(status)
+        db.commit()
+        db.refresh(status)
+        created_status_ids.append(status.id)  # Guardar para eliminarlo al final
 
-    # 🔹 Eliminar las relaciones entre roles y permisos antes de eliminar los roles
+    yield db, created_user_ids, created_role_ids, created_permission_ids, created_status_ids  # Proporciona la sesión
+
+    # 🔹 Eliminar relaciones antes de eliminar roles
     if created_role_ids:
         db.execute(
             text("DELETE FROM rol_permission WHERE rol_id = ANY(:role_ids)"),
             {"role_ids": created_role_ids}
         )
-        db.commit()
-
-    # 🔹 Eliminar las relaciones entre usuarios y roles antes de eliminar los roles
-    if created_role_ids:
         db.execute(
             text("DELETE FROM user_rol WHERE rol_id = ANY(:role_ids)"),
             {"role_ids": created_role_ids}
         )
         db.commit()
 
-    # 🔹 Eliminar los roles creados en la prueba
+    # 🔹 Eliminar los roles creados
     if created_role_ids:
         db.execute(
             text("DELETE FROM rol WHERE id = ANY(:role_ids)"),
@@ -42,7 +48,7 @@ def db():
         )
         db.commit()
 
-    # 🔹 Eliminar los permisos creados en la prueba
+    # 🔹 Eliminar los permisos creados
     if created_permission_ids:
         db.execute(
             text("DELETE FROM permission WHERE id = ANY(:permission_ids)"),
@@ -50,11 +56,11 @@ def db():
         )
         db.commit()
 
-    # 🔹 Eliminar los usuarios creados en la prueba
-    if created_user_ids:
+    # 🔹 Eliminar el estado creado en la prueba
+    if created_status_ids:
         db.execute(
-            text("DELETE FROM users WHERE id = ANY(:user_ids)"),
-            {"user_ids": created_user_ids}
+            text("DELETE FROM vars WHERE id = ANY(:status_ids)"),
+            {"status_ids": created_status_ids}
         )
         db.commit()
 
@@ -63,15 +69,15 @@ def db():
 
 @pytest.fixture()
 def user_role_service(db):
-    """Instancia del servicio de usuarios y roles para pruebas"""
+    """Instancia del servicio de roles para pruebas"""
     return UserRoleService(db[0])  # Pasamos solo la sesión de la base de datos
 
 def test_get_user_roles(user_role_service, db):
     """✅ Prueba para obtener los roles de un usuario"""
-    db_session, created_user_ids, created_role_ids, created_permission_ids = db
+    db_session, created_user_ids, created_role_ids, created_permission_ids, created_status_ids = db
 
     # 🔹 Crear un usuario de prueba
-    user = User(name=f"TestUser_{uuid.uuid4().hex[:8]}", email=f"user_{uuid.uuid4().hex[:8]}@example.com")
+    user = User(name=f"TestUser_{uuid.uuid4().hex[:8]}", email=f"user_{uuid.uuid4().hex[:8]}@example.com")      
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -79,8 +85,8 @@ def test_get_user_roles(user_role_service, db):
 
     # 🔹 Crear permisos de prueba
     permission = Permission(
-        name=f"Permission_{uuid.uuid4().hex[:8]}", 
-        description="Permission for testing", 
+        name=f"Permission_{uuid.uuid4().hex[:8]}",
+        description="Permission for testing",
         category="General"
     )
     db_session.add(permission)
@@ -90,9 +96,9 @@ def test_get_user_roles(user_role_service, db):
 
     # 🔹 Crear un rol de prueba y asignarle el permiso
     role = Role(
-        name=f"Role_{uuid.uuid4().hex[:8]}", 
-        description="Test Role", 
-        status=1
+        name=f"Role_{uuid.uuid4().hex[:8]}",
+        description="Test Role",
+        status=1  # Aseguramos que el estado 1 existe
     )
     role.permissions.append(permission)
     db_session.add(role)
@@ -108,9 +114,14 @@ def test_get_user_roles(user_role_service, db):
     # 🔹 Obtener los roles del usuario
     response = user_role_service.get_user_with_roles(user.id)
 
-    # 🔹 Validaciones
     assert response["success"] is True
-    assert response["data"]["id"] == user.id
-    assert len(response["data"]["roles"]) == 1  # Debe tener exactamente un rol
-    assert response["data"]["roles"][0]["id"] == role.id
-    assert response["data"]["roles"][0]["name"] == role.name
+    assert "data" in response
+
+    # 🔹 Verificar que los datos sean correctos
+    user_data = response["data"]
+    assert user_data["id"] == user.id
+    assert user_data["email"] == user.email
+    assert user_data["name"] == user.name
+    assert len(user_data["roles"]) == 1
+    assert user_data["roles"][0]["id"] == role.id
+    assert user_data["roles"][0]["name"] == role.name

@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.roles.services import RoleService
-from app.roles.models import Role, Permission
+from app.roles.models import Role, Permission, Vars
 import uuid
 
 @pytest.fixture(scope="function")
@@ -11,11 +11,21 @@ def db():
     """Fixture para manejar una sesión de base de datos en pruebas con rollback"""
     db = SessionLocal()
 
-    # Listas para rastrear los roles y permisos creados en la prueba
+    # Listas para rastrear los roles, permisos y estados creados en la prueba
     created_role_ids = []
     created_permission_ids = []
+    created_status_ids = []
 
-    yield db, created_role_ids, created_permission_ids  # Proporciona la sesión y las listas de IDs creados
+    # 🔹 Verificar si el estado 1 existe en la tabla `vars`, si no, crearlo
+    status = db.query(Vars).filter_by(id=1).first()
+    if not status:
+        status = Vars(id=1, name="Activo", type="status")
+        db.add(status)
+        db.commit()
+        db.refresh(status)
+        created_status_ids.append(status.id)  # Guardar para eliminarlo al final
+
+    yield db, created_role_ids, created_permission_ids, created_status_ids  # Proporciona la sesión y listas de IDs creados
 
     # 🔹 Eliminar referencias en `rol_permission` antes de borrar los roles
     if created_role_ids:
@@ -35,6 +45,11 @@ def db():
         db.query(Permission).filter(Permission.id.in_(created_permission_ids)).delete(synchronize_session=False)
         db.commit()
 
+    # 🔹 Eliminar el estado creado en la prueba (si fue agregado)
+    if created_status_ids:
+        db.query(Vars).filter(Vars.id.in_(created_status_ids)).delete(synchronize_session=False)
+        db.commit()
+
     db.rollback()  # Revierte otros cambios de la prueba
     db.close()
 
@@ -47,7 +62,7 @@ def role_service(db):
 
 def test_get_roles(role_service, db):
     """✅ Prueba para obtener la lista de roles correctamente"""
-    db_session, created_role_ids, created_permission_ids = db
+    db_session, created_role_ids, created_permission_ids, created_status_ids = db
 
     # 🔹 Crear un permiso de prueba
     permission_name = f"Test_Permission_{uuid.uuid4().hex[:8]}"  # Nombre único
@@ -59,7 +74,7 @@ def test_get_roles(role_service, db):
     # Guardamos el ID del permiso creado
     created_permission_ids.append(permission.id)
 
-    # 🔹 Crear un rol de prueba
+    # 🔹 Crear un rol de prueba con estado 1
     role_name = f"Test_Role_{uuid.uuid4().hex[:8]}"  # Nombre único
     role = Role(name=role_name, description="Role for testing", status=1)
     role.permissions.append(permission)  # Asignar el permiso al rol

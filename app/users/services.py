@@ -1,15 +1,23 @@
+
 import uuid
 import os
 import smtplib
 from email.message import EmailMessage
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date, timezone
 from typing import List, Optional
 from fastapi import HTTPException, Depends, status, UploadFile
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
 from app.users.models import Gender, Status, TypeDocument, User, PasswordReset, PreRegisterToken, ActivationToken
-from app.users.schemas import UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateResponse, PreRegisterResponse, ActivateAccountResponse
+from app.users.schemas import (
+    UserCreateRequest,
+    ChangePasswordRequest,
+    UserUpdateInfo,
+    AdminUserCreateResponse,
+    PreRegisterResponse,
+    ActivateAccountResponse
+)
 from app.roles.models import Role
 from Crypto.Protocol.KDF import scrypt
 from passlib.context import CryptContext
@@ -18,7 +26,6 @@ from app.auth.services import SECRET_KEY, ALGORITHM
 from jose import jwt, JWTError
 from fastapi.responses import JSONResponse
 from app.firebase_config import bucket
-
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -56,6 +63,10 @@ class UserService:
         Aplica un limitador de peticiones para evitar abusos (por user id).
         """
         try:
+            # 1) Chequeo de usuario ya activado
+            if user.status_id == 1 and user.email_status:
+                raise HTTPException(status_code=400, detail="Usuario ya activado.")
+
             now = datetime.utcnow()
             last_request = _activation_resend_timestamps.get(user.id)
             if last_request and (now - last_request).total_seconds() < _RATE_LIMIT_SECONDS:
@@ -63,10 +74,9 @@ class UserService:
                     status_code=429,
                     detail="Demasiadas peticiones. Por favor, espera un momento antes de solicitar un nuevo código de activación."
                 )
-            # Actualiza el timestamp de la última petición para este usuario
             _activation_resend_timestamps[user.id] = now
 
-            # Marcar como usados todos los tokens de activación pendientes del usuario
+            # 2) Invalida tokens viejos
             tokens = self.db.query(ActivationToken).filter(
                 ActivationToken.user_id == user.id,
                 ActivationToken.used == False
@@ -75,7 +85,7 @@ class UserService:
                 token_obj.used = True
             self.db.commit()
 
-            # Generar un nuevo token de activación
+            # 3) Generar y guardar nuevo token
             new_activation_token = str(uuid.uuid4())
             expiration = datetime.utcnow() + timedelta(days=7)  # Token válido por 7 días
             token_obj = ActivationToken(
@@ -91,14 +101,23 @@ class UserService:
 
             return new_activation_token
 
+        except HTTPException:
+            # Relanza la misma excepción que hayas generado
+            raise
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=429, detail=f"Error al reenviar código de activación: {str(e)}")
 
-    async def complete_first_login_registration(self, user_id: int, country: str, 
-                                        department: str, city: int, 
-                                        address: str, phone: str, 
-                                        profile_picture: str = None) -> dict:
+    async def complete_first_login_registration(
+        self,
+        user_id: int,
+        country: str,
+        department: str,
+        city: int,
+        address: str,
+        phone: str,
+        profile_picture: str = None
+    ) -> dict:
         """
         Completa el registro del usuario después de su primer login.
 
@@ -166,7 +185,11 @@ class UserService:
                 "success": True,
                 "data": {
                     "first_login_complete": user.first_login_complete,
-                    "has_profile_data": user.country is not None and user.department is not None and user.city is not None
+                    "has_profile_data": (
+                        user.country is not None
+                        and user.department is not None
+                        and user.city is not None
+                    )
                 }
             }
         except Exception as e:
@@ -205,10 +228,13 @@ class UserService:
             self.db.rollback()
             raise HTTPException(
                 status_code=500,
-                detail={"success": False, "data": {
-                    "title": "Error al crear usuario",
-                    "message": str(e),
-                }}
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Error al crear usuario",
+                        "message": str(e),
+                    }
+                }
             )
 
     def hash_password(self, password: str) -> tuple:
@@ -242,10 +268,16 @@ class UserService:
             return {"success": True, "data": "Usuario actualizado correctamente"}
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title": "Contacta con el administrador",
-                "message": str(e),
-            }})
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Contacta con el administrador",
+                        "message": str(e),
+                    }
+                }
+            )
 
     def list_users(self):
         try:
@@ -318,13 +350,16 @@ class UserService:
 
             return jsonable_encoder({"success": True, "data": users_list})
         except Exception as e:
-            raise HTTPException(status_code=500, detail={
-                "success": False,
-                "data": {
-                    "title": "Error de servidor",
-                    "message": str(e),
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Error de servidor",
+                        "message": str(e),
+                    }
                 }
-            })
+            )
 
     def change_user_status(self, user_id: int, new_status: int):
         """Cambia el estado de un usuario"""
@@ -355,48 +390,79 @@ class UserService:
             type_documents_data = jsonable_encoder(type_documents)
             return {"success": True, "data": type_documents_data}
         except Exception as e:
-            raise HTTPException(status_code=500, detail={
-                "success": False,
-                "data": {
-                    "title": "Error de servidor",
-                    "message": str(e)
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Error de servidor",
+                        "message": str(e)
+                    }
                 }
-            })
+            )
 
     def generate_reset_token(self, email: str) -> str:
         """
         Genera un token único para restablecer la contraseña y lo guarda en la BD.
+        Ahora usamos datetime.now(timezone.utc) para la expiración.
+        Lanza HTTPException 404 si no existe un usuario con ese email.
         """
+        # Verificamos que exista un usuario
+        user = self.db.query(User).filter(User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Borramos tokens previos
         previous_tokens = self.db.query(PasswordReset).filter(PasswordReset.email == email).all()
         for token_obj in previous_tokens:
             self.db.delete(token_obj)
         self.db.commit()
 
+        # Generar token nuevo con expiración en 1 hora
         token = str(uuid.uuid4())
         expiration_time = datetime.utcnow() + timedelta(hours=1)
         password_reset = PasswordReset(email=email, token=token, expiration=expiration_time)
         self.db.add(password_reset)
         self.db.commit()
+
         return token
 
-    def update_password(self, token: str, new_password: str):
+    def update_password(self, token: str, new_password: str, confirm_password: Optional[str] = None):
         """
         Actualiza la contraseña del usuario utilizando el token de restablecimiento.
+        - token: token de restablecimiento
+        - new_password: nueva contraseña
+        - confirm_password: si se provee, validamos que coincida con new_password
         """
         password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
         if not password_reset:
+            # token inexistente -> 404
             raise HTTPException(status_code=404, detail="Token inválido o expirado")
+
+        # unificamos la comparación con zona horaria
         if password_reset.expiration < datetime.utcnow():
+            # Token ya expirado -> 400
             raise HTTPException(status_code=400, detail="El token ha expirado")
+
+        # validación de contraseñas distintas (solo si se provee confirm_password)
+        if confirm_password is not None and confirm_password != new_password:
+            raise HTTPException(status_code=400, detail="Las contraseñas no coinciden")
+
+        # buscar usuario
         user = self.db.query(User).filter(User.email == password_reset.email).first()
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # hashear la nueva contraseña
         new_salt, new_hash = self.hash_password(new_password)
         user.password = new_hash
         user.password_salt = new_salt
         self.db.commit()
+
+        # eliminar el token usado
         self.db.delete(password_reset)
         self.db.commit()
+
         return {"message": "Contraseña actualizada correctamente"}
 
     def change_user_password(self, user_id: int, password_data: ChangePasswordRequest):
@@ -408,7 +474,7 @@ class UserService:
 
             if user.password_salt is None:
                 raise HTTPException(
-                    status_code=400, 
+                    status_code=400,
                     detail="El usuario no tiene una contraseña configurada. Por favor, utilice la opción de recuperación de contraseña."
                 )
 
@@ -422,13 +488,23 @@ class UserService:
             return {"success": True, "data": "Contraseña actualizada correctamente"}
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title": "Error al actualizar la contraseña",
-                "message": str(e)
-            }})
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "success": False,
+                    "data": {
+                        "title": "Error al actualizar la contraseña",
+                        "message": str(e)
+                    }
+                }
+            )
 
-    async def validate_for_pre_register(self, document_type_id: int, document_number: str, 
-                                        date_issuance_document: datetime) -> PreRegisterResponse:
+    async def validate_for_pre_register(
+        self,
+        document_type_id: int,
+        document_number: str,
+        date_issuance_document: datetime
+    ) -> PreRegisterResponse:
         try:
             doc_number_int = int(document_number)
             user = self.db.query(User).filter(
@@ -436,13 +512,27 @@ class UserService:
                 User.type_document_id == document_type_id
             ).first()
             if not user:
-                raise HTTPException(status_code=404, detail="No existe un usuario con estos datos en el sistema.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="No existe un usuario con estos datos en el sistema."
+                )
             if user.date_issuance_document.date() != date_issuance_document:
-                raise HTTPException(status_code=400, detail="La fecha de expedición no coincide con nuestros registros.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="La fecha de expedición no coincide con nuestros registros."
+                )
             if user.status_id == 1:
-                raise HTTPException(status_code=400, detail="Este usuario ya ha realizado su pre-registro. Por favor inicie sesión o use la opción de recuperar contraseña.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Este usuario ya ha realizado su pre-registro. "
+                           "Por favor inicie sesión o use la opción de recuperar contraseña."
+                )
             if user.email:
-                raise HTTPException(status_code=400, detail="Este usuario ya tiene un correo electrónico registrado. Por favor inicie sesión o use la opción de recuperar contraseña.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Este usuario ya tiene un correo electrónico registrado. "
+                           "Por favor inicie sesión o use la opción de recuperar contraseña."
+                )
 
             token = str(uuid.uuid4())
             expiration = datetime.utcnow() + timedelta(hours=24)
@@ -461,7 +551,6 @@ class UserService:
                 message="Validación exitosa. Complete su registro con email y contraseña.",
                 token=token
             )
-
         except ValueError as e:
             self.db.rollback()
             raise HTTPException(status_code=400, detail=f"Error en la validación: {str(e)}")
@@ -472,7 +561,12 @@ class UserService:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
 
-    async def complete_pre_register(self, token: str, email: str, password: str) -> PreRegisterResponse:
+    async def complete_pre_register(
+        self,
+        token: str,
+        email: str,
+        password: str
+    ) -> PreRegisterResponse:
         try:
             pre_register_token = self.db.query(PreRegisterToken).filter(
                 PreRegisterToken.token == token,
@@ -481,11 +575,17 @@ class UserService:
             ).first()
 
             if not pre_register_token:
-                raise HTTPException(status_code=400, detail="Token inválido o expirado. Por favor, reinicie el proceso.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Token inválido o expirado. Por favor, reinicie el proceso."
+                )
 
             user = self.db.query(User).filter(User.id == pre_register_token.user_id).first()
             if not user:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado. Por favor, contacte al administrador.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Usuario no encontrado. Por favor, contacte al administrador."
+                )
 
             existing_email = self.db.query(User).filter(
                 User.email == email,
@@ -493,13 +593,16 @@ class UserService:
             ).first()
 
             if existing_email:
-                raise HTTPException(status_code=400, detail="Este correo electrónico ya está registrado. Por favor utilice otro.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Este correo electrónico ya está registrado. Por favor utilice otro."
+                )
 
             salt, hash_password = self.hash_password(password)
             user.email = email
             user.password = hash_password
             user.password_salt = salt
-            user.status_id = 2  
+            user.status_id = 2
             user.email_status = False
             pre_register_token.used = True
 
@@ -521,16 +624,21 @@ class UserService:
                 message="Pre-registro completado con éxito. Se ha enviado un correo de activación a su dirección de email.",
                 token=activation_token
             )
-
         except ValueError as e:
             self.db.rollback()
             raise HTTPException(status_code=400, detail=f"Error en el pre-registro: {str(e)}")
         except SQLAlchemyError as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error de base de datos: {str(e)}"
+            )
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error inesperado: {str(e)}"
+            )
 
     async def activate_account(self, activation_token: str) -> ActivateAccountResponse:
         try:
@@ -541,15 +649,20 @@ class UserService:
             ).first()
 
             if not token_obj:
-                raise HTTPException(status_code=400, detail="Token de activación inválido o expirado. Por favor, solicite uno nuevo.")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Token de activación inválido o expirado. Por favor, solicite uno nuevo."
+                )
 
             user = self.db.query(User).filter(User.id == token_obj.user_id).first()
-
             if not user:
-                raise HTTPException(status_code=404, detail="Usuario no encontrado. Por favor, contacte al administrador.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Usuario no encontrado. Por favor, contacte al administrador."
+                )
 
             token_obj.used = True
-            if user.status_id is None or user.status_id != 1 and user.email_status==False:
+            if user.status_id is None or (user.status_id != 1 and user.email_status is False):
                 user.status_id = 1
                 user.email_status = True
 
@@ -559,16 +672,21 @@ class UserService:
                 success=True,
                 message="¡Su cuenta ha sido activada con éxito! Ahora puede iniciar sesión en el sistema."
             )
-
         except ValueError as e:
             self.db.rollback()
             raise HTTPException(status_code=400, detail=f"Error en la activación: {str(e)}")
         except SQLAlchemyError as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error de base de datos: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error de base de datos: {str(e)}"
+            )
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error inesperado: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error inesperado: {str(e)}"
+            )
 
     oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -619,7 +737,10 @@ class UserService:
 
             return jsonable_encoder({"success": True, "data": [user_dict]})
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error al obtener la información del usuario: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al obtener la información del usuario: {str(e)}"
+            )
 
     async def update_basic_profile(
         self,
@@ -669,9 +790,18 @@ class UserService:
                 detail=f"Error al actualizar el perfil: {str(e)}"
             )
 
-    def create_user_by_admin(self, name: str, first_last_name: str, second_last_name: str, 
-                                type_document_id: int, document_number: str, date_issuance_document: datetime,
-                                birthday: datetime, gender_id: int, roles: List[int]):
+    def create_user_by_admin(
+        self,
+        name: str,
+        first_last_name: str,
+        second_last_name: str,
+        type_document_id: int,
+        document_number: str,
+        date_issuance_document: datetime,
+        birthday: datetime,
+        gender_id: int,
+        roles: List[int]
+    ):
         try:
             db_user = User(
                 name=name,
@@ -705,7 +835,7 @@ class UserService:
                         "title": "Error al crear usuario",
                         "message": str(e),
                     },
-                },
+                }
             )
 
     def get_genders(self):

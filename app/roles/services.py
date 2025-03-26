@@ -131,11 +131,10 @@ class RoleService:
         except SQLAlchemyError:
             self.db.rollback()
             raise HTTPException(status_code=500, detail="Error al editar el rol.")
-            
+
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:
-            # Realizamos la consulta SQL para obtener los roles y el estado asociado
             query = """
                 SELECT
                     r.id AS role_id,
@@ -144,48 +143,39 @@ class RoleService:
                     v.name AS status_name,
                     r.status,
                     count(ur.id) AS quantity_users,
-                    string_agg(
+                    COALESCE(string_agg(
                         CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
-                    ) AS permissions
+                    ), '') AS permissions
                 FROM
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
                     LEFT JOIN vars v ON r.status = v.id
-                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id  -- Relación con la tabla de permisos
-                    LEFT JOIN permission p ON p.id = rp.permission_id  -- Relación con la tabla de permisos
+                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id
+                    LEFT JOIN permission p ON p.id = rp.permission_id
                 GROUP BY
-                    r.id,
-                    r.name,
-                    r.description,
-                    v.name,
-                    r.status
+                    r.id, r.name, r.description, v.name, r.status
             """
-            # Ejecutamos la consulta SQL y obtenemos el resultado como una lista de diccionarios
             roles = self.db.execute(text(query)).fetchall()
-            
-            # Procesar el resultado
+        
             roles_data = []
             for role in roles:
-                # Procesar la cadena de permisos
                 permissions = []
-                if role.permissions:
-                    # Split by comma and extract ID, Name and Description for each permission
+                if role.permissions:  
                     for permission_str in role.permissions.split(','):
                         if ':::::' not in permission_str:
                             continue  # Saltar valores incorrectos
-
                         parts = permission_str.split(':::::')
-                        if len(parts) != 3:
-                            continue  # Evitar errores si no hay exactamente 3 partes
+                    
+                    # Verificar que tenga los tres valores esperados
+                        if len(parts) == 3:
+                            perm_id, perm_name, perm_description = parts
+                            if perm_id.isdigit():  # ✅ Verifica que sea un número
+                                permissions.append({
+                                    "id": int(perm_id),
+                                    "name": perm_name,
+                                    "description": perm_description
+                                })
 
-                        perm_id, perm_name, perm_description = parts
-                        permissions.append({
-                            "id": int(perm_id),
-                            "name": perm_name,
-                            "description": perm_description
-                        })
-
-                # Construir el diccionario con los detalles del rol
                 role_data = {
                     "role_id": role.role_id,
                     "role_name": role.role_name,
@@ -196,10 +186,10 @@ class RoleService:
                     "permissions": permissions  # Lista de permisos con id, name y description
                 }
                 roles_data.append(role_data)
-            
             return {"success": True, "data": roles_data}
+
         except Exception as e:
-            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles."+str(e)})
+            raise HTTPException(status_code=500, detail={"success": False, "data": f"Error al obtener los roles: {str(e)}"})
         
     def get_rol(self, role_id):
         """Obtener detalles de un rol con manejo de errores"""
@@ -220,30 +210,29 @@ class RoleService:
                 "title" : f"Contacta con el administrador",
                 "message" : str(e),
             }})
-
+        
     def change_role_status(self, role_id: int, new_status: int):
         """Cambiar el estado de un rol"""
         try:
             role = self.db.query(models.Role).filter(models.Role.id == role_id).first()
             if not role:
                 raise HTTPException(status_code=404, detail="Rol no encontrado.")
-            
-            # Verifica si el estado proporcionado existe en la tabla StatusUser
+
             status = self.db.query(models.Vars).filter(models.Vars.id == new_status).first()
             if not status:
                 raise HTTPException(status_code=400, detail="Estado no válido.")
 
-            # Cambiar el estado del rol
             role.status = new_status
             self.db.commit()
             self.db.refresh(role)
-
             return {"success": True, "data": "Estado de rol actualizado correctamente."}
+
+        except HTTPException:
+            raise  
+
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del rol: {str(e)}")
-        
-
+            raise HTTPException(status_code=500, detail=f"Error inesperado al actualizar el estado del rol: {str(e)}")
         
 
     # def update_role_permissions(self, role_id: int, permission_ids: list[int]):
