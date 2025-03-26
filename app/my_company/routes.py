@@ -236,6 +236,17 @@ async def delete_certificate(
     certificate_service = services.CertificateService(db)
     return await certificate_service.delete_certificate(certificate_id)
 
+
+@router.patch("/certificates/{certificate_id}/status", response_model=dict, summary="Habilitar/Inhabilitar un certificado digital")
+def update_certificate_status(certificate_id: int, new_status: int = Form(...), db: Session = Depends(get_db)):
+    """
+    Actualiza el estado de un certificado digital.
+    new_status debe ser 22 (Activo) o 23 (Inactivo).
+    """
+    certificate_service = services.CertificateService(db)
+    return certificate_service.update_certificate_status(certificate_id, new_status)
+
+
 # Rutas para tipos de cultivo
 @router.get("/type-crops", summary="Listar todos los tipos de cultivo")
 def list_type_crops(
