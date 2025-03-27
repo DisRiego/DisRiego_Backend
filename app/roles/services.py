@@ -156,7 +156,7 @@ class RoleService:
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:
-            # Consulta modificada para contar los usuarios de cada rol utilizando DISTINCT en user_rol.user_id
+            # Consulta modificada: se usa DISTINCT en el string_agg para evitar duplicados
             query = """
                 SELECT
                     r.id AS role_id,
@@ -165,9 +165,7 @@ class RoleService:
                     v.name AS status_name,
                     r.status,
                     COUNT(DISTINCT ur.user_id) AS quantity_users,
-                    string_agg(
-                        CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
-                    ) AS permissions
+                    COALESCE(string_agg(DISTINCT CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','), '') AS permissions
                 FROM
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
@@ -214,6 +212,7 @@ class RoleService:
             return {"success": True, "data": roles_data}
         except Exception as e:
             raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles." + str(e)})
+
 
         
     def get_rol(self, role_id):
