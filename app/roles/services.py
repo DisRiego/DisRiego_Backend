@@ -157,6 +157,7 @@ class RoleService:
         """Obtener todos los roles con manejo de errores"""
         try:
             # Realizamos la consulta SQL para obtener los roles y el estado asociado
+            
             query = """
                 SELECT
                     r.id AS role_id,
@@ -164,16 +165,17 @@ class RoleService:
                     r.description AS role_description,
                     v.name AS status_name,
                     r.status,
-                    count(ur.id) AS quantity_users,
+                    COUNT(DISTINCT ur.id) AS quantity_users,
                     string_agg(
-                        CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
-                    ) AS permissions
+                        DISTINCT CONCAT(p.id, ':::::', p.name, ':::::', p.description),
+                        ','
+                    ) FILTER (WHERE p.id IS NOT NULL) AS permissions
                 FROM
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
                     LEFT JOIN vars v ON r.status = v.id
-                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id  -- Relación con la tabla de permisos
-                    LEFT JOIN permission p ON p.id = rp.permission_id  -- Relación con la tabla de permisos
+                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id
+                    LEFT JOIN permission p ON p.id = rp.permission_id
                 GROUP BY
                     r.id,
                     r.name,

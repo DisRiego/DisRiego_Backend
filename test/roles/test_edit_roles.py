@@ -83,7 +83,7 @@ def test_edit_role_success(role_service, db):
 
     # 🔹 Editar el rol
     updated_role_data = RoleCreate(name=role.name, description="Updated description", permissions=[permission.id])
-    response = role_service.edit_rol(role.id, updated_role_data)
+    response = role_service.edit_role(role.id, updated_role_data)
 
     # ✅ Verificaciones
     assert response["success"] is True
@@ -100,6 +100,6 @@ def test_edit_role_not_found(role_service):
     """❌ Prueba que no se pueda editar un rol inexistente"""
     updated_role_data = RoleCreate(name="Inexistente", description="No existe", permissions=[1])
     with pytest.raises(HTTPException) as excinfo:
-        role_service.edit_rol(9999, updated_role_data)
+        role_service.edit_role(9999, updated_role_data)
     assert excinfo.value.status_code == 404
     assert "El rol no existe" in str(excinfo.value.detail)

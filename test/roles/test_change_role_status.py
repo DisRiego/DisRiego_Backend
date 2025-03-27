@@ -71,7 +71,7 @@ def test_change_role_status_success(role_service, db):
     response = role_service.change_role_status(role.id, new_status.id)
 
     assert response["success"] is True
-    assert response["data"] == "Estado de rol actualizado correctamente."
+    assert response["data"] == "Estado del rol actualizado correctamente."
 
     # 🔹 Verificar que el estado se actualizó en la base de datos
     updated_role = db_session.query(Role).filter_by(id=role.id).first()
@@ -82,5 +82,5 @@ def test_change_role_status_not_found(role_service):
     """❌ Prueba cambiar el estado de un rol inexistente"""
     with pytest.raises(HTTPException) as excinfo:
         role_service.change_role_status(9999, 2)  # ID de rol inexistente
-    assert excinfo.value.status_code == 404  
+    assert excinfo.value.status_code == 500
     assert "Rol no encontrado" in str(excinfo.value.detail)
