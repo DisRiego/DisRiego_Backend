@@ -55,7 +55,7 @@ class CompanyService(BaseService):
         self.db = db
     
     async def get_company_info(self):
-        """Obtener la información de la empresa"""
+        """Obtener la información de la empresa, incluyendo el certificado vigente (número de serie)"""
         try:
             company = self.db.query(Company).first()
             if not company:
@@ -67,12 +67,35 @@ class CompanyService(BaseService):
                         "data": None
                     }
                 )
+            
+            # Convertir la información de la empresa a diccionario
+            company_data = jsonable_encoder(company)
+            
+            # Obtener el certificado vigente (si existe)
+            now = datetime.utcnow()
+            company_cert = (
+                self.db.query(CompanyCertificate)
+                .join(DigitalCertificate)
+                .filter(
+                    CompanyCertificate.company_id == company.id,
+                    DigitalCertificate.start_date <= now,
+                    DigitalCertificate.expiration_date > now
+                )
+                .first()
+            )
+            if company_cert:
+                company_data["certificate"] = {
+                    "serial_number": company_cert.digital_certificate.serial_number
+                }
+            else:
+                company_data["certificate"] = None
+
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Información de empresa obtenida correctamente",
-                    "data": jsonable_encoder(company)
+                    "data": company_data
                 }
             )
         except Exception as e:
