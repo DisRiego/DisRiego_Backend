@@ -67,6 +67,11 @@ class DigitalCertificate(Base):
     expiration_date = Column(Date, nullable=False)
     attached = Column(String(255), nullable=False)
     nit = Column(Integer, nullable=False)  
+    # Columna para el estado del certificado (22: Activo, 23: Inactivo)
+    status_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=22)
+
+    # Relación para acceder al nombre del estado sin llamar directamente a Vars en los servicios
+    status = relationship("Vars", foreign_keys=[status_id])
 
     def __repr__(self):
         return f"<DigitalCertificate(id={self.id}, serial_number={self.serial_number})>"

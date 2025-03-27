@@ -743,37 +743,42 @@ class PropertyLotService:
             )
         
     def get_properties_for_user(self, user_id: int):
-        """Obtener todos los predios de un usuario"""
+        """Obtener todos los predios de un usuario, incluyendo el nombre del estado"""
         try:
-            # Realizar la consulta para obtener todos los predios de un lote
-            properties = self.db.query(Property).join(PropertyUser, PropertyUser.property_id == Property.id).filter(PropertyUser.user_id == user_id).all()
-            
-            if not properties:
-                return JSONResponse(
-                    status_code=404,
-                    content={
-                        "success": False,
-                        "data": jsonable_encoder([])
-                    }
+            results = (
+                self.db.query(
+                    Property,
+                    Vars.name.label("state_name")
                 )
+                .join(PropertyUser, PropertyUser.property_id == Property.id)
+                .join(Vars, Property.state == Vars.id)
+                .filter(PropertyUser.user_id == user_id)
+                .all()
+            )
+            properties_list = []
+            for prop, state_name in results:
+                prop_data = jsonable_encoder(prop)
+                prop_data["state_name"] = state_name
+                properties_list.append(prop_data)
+
+            if not properties_list:
+                return JSONResponse(status_code=404, content={"success": False, "data": []})
 
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
-                    "data": jsonable_encoder(properties)
+                    "message": "Predios del usuario obtenidos correctamente",
+                    "data": properties_list
                 }
             )
-
         except Exception as e:
             return JSONResponse(
                 status_code=500,
                 content={
                     "success": False,
-                    "data": {
-                        "title": "Error al obtener los lotes del predio",
-                        "message": f"Error al obtener los lotes, Contacta al administrador: {str(e)}"
-                    }
+                    "message": f"Error al obtener predios del usuario: {str(e)}",
+                    "data": None
                 }
             )
         

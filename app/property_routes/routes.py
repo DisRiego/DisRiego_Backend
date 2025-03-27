@@ -165,6 +165,37 @@ def update_lot_state(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del lote: {str(e)}")
 
+@router.put("/lot/{lot_id}/edit-crop", response_model=dict)
+async def edit_lot_crop(
+    lot_id: int,
+    type_crop_id: int = Form(...),
+    planting_date: str = Form(...),  
+    payment_interval: int = Form(...),
+    estimated_harvest_date: str = Form(...),  #
+    db: Session = Depends(get_db)
+):
+    """
+    Editar los detalles de cultivo de un lote:
+    - Tipo de cultivo (type_crop_id)
+    - Fecha de siembra (planting_date)
+    - Intervalo de pago (payment_interval)
+    - Fecha estimada de cosecha (estimated_harvest_date)
+    """
+    try:
+        planting_date_obj = datetime.strptime(planting_date, "%Y-%m-%d").date()
+        estimated_harvest_date_obj = datetime.strptime(estimated_harvest_date, "%Y-%m-%d").date()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
+    
+    property_service = PropertyLotService(db)
+    return await property_service.edit_lot_fields(
+        lot_id,
+        payment_interval,
+        type_crop_id,
+        planting_date_obj,
+        estimated_harvest_date_obj
+    )
+
 
 
 @router.get("/")

@@ -499,15 +499,22 @@ class CertificateService(BaseService):
         self.db = db
     
     async def get_certificates(self):
-        """Obtener todos los certificados digitales"""
+        """Obtener todos los certificados digitales incluyendo el nombre del estado"""
         try:
             certificates = self.db.query(DigitalCertificate).all()
+            certificates_list = []
+            for certificate in certificates:
+                cert_data = jsonable_encoder(certificate)
+                # Usamos la relación para obtener el nombre del estado
+                cert_data["nombre_estado"] = certificate.status.name if certificate.status else None
+                certificates_list.append(cert_data)
+                
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Certificados obtenidos correctamente",
-                    "data": jsonable_encoder(certificates)
+                    "data": certificates_list
                 }
             )
         except Exception as e:
@@ -521,9 +528,21 @@ class CertificateService(BaseService):
             )
         
     
-    
-    async def get_certificate(self, certificate_id: int):
-        """Obtener un certificado digital por su ID"""
+    def update_certificate_status(self, certificate_id: int, new_status: int):
+        """
+        Actualiza el estado de un certificado digital.
+        Los valores válidos para new_status son 22 (Activo) y 23 (Inactivo).
+        Devuelve la información del certificado, incluyendo el nombre del estado.
+        """
+        if new_status not in (22, 23):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "message": "El estado debe ser 22 (Activo) o 23 (Inactivo)",
+                    "data": None
+                }
+            )
         try:
             certificate = self.db.query(DigitalCertificate).filter(DigitalCertificate.id == certificate_id).first()
             if not certificate:
@@ -535,12 +554,55 @@ class CertificateService(BaseService):
                         "data": None
                     }
                 )
+            certificate.status_id = new_status
+            self.db.commit()
+            self.db.refresh(certificate)
+
+            cert_data = jsonable_encoder(certificate)
+            # Accedemos al nombre del estado a través de la relación
+            cert_data["nombre_estado"] = certificate.status.name if certificate.status else None
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "message": "Estado del certificado actualizado correctamente",
+                    "data": cert_data
+                }
+            )
+        except Exception as e:
+            self.db.rollback()
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "success": False,
+                    "message": f"Error al actualizar el estado del certificado: {str(e)}",
+                    "data": None
+                }
+            )
+    async def get_certificate(self, certificate_id: int):
+        """Obtener un certificado digital por su ID, incluyendo el nombre del estado"""
+        try:
+            certificate = self.db.query(DigitalCertificate).filter(DigitalCertificate.id == certificate_id).first()
+            if not certificate:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "success": False,
+                        "message": "Certificado no encontrado",
+                        "data": None
+                    }
+                )
+            # Utilizamos la relación 'status' para obtener el nombre del estado
+            cert_data = jsonable_encoder(certificate)
+            cert_data["nombre_estado"] = certificate.status.name if certificate.status else None
+
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Certificado obtenido correctamente",
-                    "data": jsonable_encoder(certificate)
+                    "data": cert_data
                 }
             )
         except Exception as e:
@@ -758,15 +820,21 @@ class TypeCropService:
                 }
             )
     def get_all_types(self):
-        """Obtener todos los tipos de cultivo"""
+        """Obtener todos los tipos de cultivo incluyendo el nombre del estado y del intervalo de pago"""
         try:
             types = self.db.query(TypeCrop).all()
+            types_list = []
+            for t in types:
+                t_data = jsonable_encoder(t)
+                t_data["nombre_estado"] = t.state.name if t.state else None
+                t_data["nombre_intervalo_pago"] = t.payment_interval.name if t.payment_interval else None
+                types_list.append(t_data)
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Tipos de cultivo obtenidos correctamente",
-                    "data": jsonable_encoder(types)
+                    "data": types_list
                 }
             )
         except Exception as e:
@@ -778,9 +846,11 @@ class TypeCropService:
                     "data": None
                 }
             )
+
+
     
     def get_type(self, type_id: int):
-        """Obtener un tipo de cultivo por ID"""
+        """Obtener un tipo de cultivo por ID con el nombre del estado y del intervalo de pago"""
         try:
             type_crop = self.db.query(TypeCrop).filter(TypeCrop.id == type_id).first()
             if not type_crop:
@@ -792,12 +862,16 @@ class TypeCropService:
                         "data": None
                     }
                 )
+            type_crop_data = jsonable_encoder(type_crop)
+            type_crop_data["nombre_estado"] = type_crop.state.name if type_crop.state else None
+            type_crop_data["nombre_intervalo_pago"] = type_crop.payment_interval.name if type_crop.payment_interval else None
+
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": True,
                     "message": "Tipo de cultivo obtenido correctamente",
-                    "data": jsonable_encoder(type_crop)
+                    "data": type_crop_data
                 }
             )
         except Exception as e:
