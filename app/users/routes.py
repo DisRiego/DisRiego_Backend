@@ -246,20 +246,23 @@ def admin_edit_user(
         raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
     try:
         user_service = UserService(db)
-        result = user_service.update_user(
-            user_id,
-            name=update_data.name,
-            first_last_name=update_data.first_last_name,
-            second_last_name=update_data.second_last_name,
-            type_document_id=update_data.type_document_id,
-            document_number=update_data.document_number,
-            date_issuance_document=update_data.date_issuance_document,
-            birthday=update_data.birthday,
-            gender_id=update_data.gender_id,    
-        )
+        
+        update_fields = {
+            "name": update_data.name,
+            "first_last_name": update_data.first_last_name,
+            "second_last_name": update_data.second_last_name,
+            "type_document_id": update_data.type_document_id,
+            "document_number": update_data.document_number,
+            "date_issuance_document": update_data.date_issuance_document,
+            "birthday": update_data.birthday,
+            "gender_id": update_data.gender_id,    
+        }
         if update_data.roles:
+            
             roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
-            result = user_service.update_user(user_id, roles=roles_obj)
+            update_fields["roles"] = roles_obj
+
+        result = user_service.update_user(user_id, **update_fields)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
