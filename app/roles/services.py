@@ -156,7 +156,7 @@ class RoleService:
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:
-            # Realizamos la consulta SQL para obtener los roles y el estado asociado
+            # Consulta modificada para contar los usuarios de cada rol utilizando DISTINCT en user_rol.user_id
             query = """
                 SELECT
                     r.id AS role_id,
@@ -164,7 +164,7 @@ class RoleService:
                     r.description AS role_description,
                     v.name AS status_name,
                     r.status,
-                    count(ur.id) AS quantity_users,
+                    COUNT(DISTINCT ur.user_id) AS quantity_users,
                     string_agg(
                         CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','
                     ) AS permissions
@@ -172,8 +172,8 @@ class RoleService:
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
                     LEFT JOIN vars v ON r.status = v.id
-                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id  -- Relación con la tabla de permisos
-                    LEFT JOIN permission p ON p.id = rp.permission_id  -- Relación con la tabla de permisos
+                    LEFT JOIN rol_permission rp ON rp.rol_id = r.id
+                    LEFT JOIN permission p ON p.id = rp.permission_id
                 GROUP BY
                     r.id,
                     r.name,
@@ -181,24 +181,18 @@ class RoleService:
                     v.name,
                     r.status
             """
-            # Ejecutamos la consulta SQL y obtenemos el resultado como una lista de diccionarios
             roles = self.db.execute(text(query)).fetchall()
-            
-            # Procesar el resultado
+
             roles_data = []
             for role in roles:
-                # Procesar la cadena de permisos
                 permissions = []
                 if role.permissions:
-                    # Split by comma and extract ID, Name and Description for each permission
                     for permission_str in role.permissions.split(','):
                         if ':::::' not in permission_str:
-                            continue  # Saltar valores incorrectos
-
+                            continue
                         parts = permission_str.split(':::::')
                         if len(parts) != 3:
-                            continue  # Evitar errores si no hay exactamente 3 partes
-
+                            continue
                         perm_id, perm_name, perm_description = parts
                         permissions.append({
                             "id": int(perm_id),
@@ -206,7 +200,6 @@ class RoleService:
                             "description": perm_description
                         })
 
-                # Construir el diccionario con los detalles del rol
                 role_data = {
                     "role_id": role.role_id,
                     "role_name": role.role_name,
@@ -214,13 +207,14 @@ class RoleService:
                     "status_name": role.status_name,
                     "status": role.status,
                     "quantity_users": role.quantity_users,
-                    "permissions": permissions  # Lista de permisos con id, name y description
+                    "permissions": permissions
                 }
                 roles_data.append(role_data)
-            
+
             return {"success": True, "data": roles_data}
         except Exception as e:
-            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles."+str(e)})
+            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles." + str(e)})
+
         
     def get_rol(self, role_id):
         """Obtener detalles de un rol con manejo de errores"""
