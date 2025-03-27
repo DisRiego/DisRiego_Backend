@@ -415,9 +415,36 @@ class PropertyLotService:
                         }
                     }
                 )
+            if existing_property.state != 16:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Creación de lotes",
+                            "message": "No se puede crear un lote en un predio inactivo."
+                        }
+                    }
+                )       
+
             
             # Validación de unicidad de registro de predio
+            try:
+                real_estate_registration_number = int(real_estate_registration_number)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Creación de lotes",
+                            "message": "El número de matrícula debe ser un entero válido."
+                            }
+                    }
+                )
+
             existing_lot = self.db.query(Lot).filter(Lot.real_estate_registration_number == str(real_estate_registration_number)).first()
+
             if existing_lot:
                 return JSONResponse(
                     status_code=400,
@@ -444,8 +471,7 @@ class PropertyLotService:
                 )
                 # raise HTTPException(status_code=400, detail="Faltan campos requeridos.")
             
-            # Validar que los archivos hayan sido enviados
-            if not public_deed or not freedom_tradition_certificate:
+            if public_deed is None or public_deed.filename == "" or freedom_tradition_certificate is None or freedom_tradition_certificate.filename == "":
                 return JSONResponse(
                     status_code=400,
                     content={
@@ -456,7 +482,7 @@ class PropertyLotService:
                         }
                     }
                 )
-        
+
             # Guardar los archivos
             public_deed_path = await self.save_file(public_deed, "uploads/files_lots/")
             freedom_tradition_certificate_path = await self.save_file(freedom_tradition_certificate, "uploads/files_lots/")
@@ -503,7 +529,7 @@ class PropertyLotService:
 
         except Exception as e:
             self.db.rollback()  # Revertir cambios si ocurre algún error
-            # print(str(e))
+            print("❌ ERROR INTERNO EN CREATE LOT:", str(e))
             return JSONResponse(
                 status_code=500,
                 content={
