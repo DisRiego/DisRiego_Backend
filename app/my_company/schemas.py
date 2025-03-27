@@ -32,6 +32,7 @@ class CompanyBase(BaseModel):
     city: str = Field(..., min_length=1, max_length=100)
     address: str = Field(..., min_length=1, max_length=45)
     color_palette_id: int
+    logo: Optional[str] = ""
 
 class CompanyCreate(CompanyBase):
     pass

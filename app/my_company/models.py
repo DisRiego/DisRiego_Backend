@@ -3,6 +3,8 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 from datetime import datetime
 from app.roles.models import Vars
+from app.users.models import User
+
 
 class ColorPalette(Base):
     """Modelo para almacenar paletas de colores"""
