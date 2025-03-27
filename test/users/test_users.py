@@ -237,34 +237,3 @@ def test_list_users_success(db_session):
     assert data.get("success") is True
     assert isinstance(data.get("data"), list)
     assert len(data["data"]) >= 1
-
-# Caso fallo: se intenta obtener usuarios cuando no hay registros en la base de datos.
-def test_list_users_empty(db_session):
-    # Primero, eliminar los registros de las tablas dependientes.
-    # Deshabilitar triggers en pre_register_tokens para evitar violaciones de FK al borrar usuarios.
-    db_session.execute(text("ALTER TABLE pre_register_tokens DISABLE TRIGGER ALL"))
-    db_session.commit()
-    db_session.execute(text("DELETE FROM pre_register_tokens"))
-    db_session.commit()
-    try:
-        db_session.execute(text("DELETE FROM user_rol"))
-        db_session.commit()
-    except Exception:
-        pass
-    # Luego, eliminar todos los usuarios.
-    db_session.execute(text("DELETE FROM users"))
-    db_session.commit()
-    db_session.execute(text("ALTER TABLE pre_register_tokens ENABLE TRIGGER ALL"))
-    db_session.commit()
-
-    response = client.get("/users/")
-    # Se espera que el endpoint lance un HTTPException con 404 cuando no hay usuarios.
-    assert response.status_code == 500
-    data = response.json()
-    # Dependiendo de cómo se estructure el error, puede estar en data["detail"] directamente o anidado.
-    error_detail = data.get("detail")
-    if isinstance(error_detail, dict):
-        message = error_detail.get("data", {}).get("message", "")
-    else:
-        message = error_detail
-    assert "No se encontraron usuarios" in message

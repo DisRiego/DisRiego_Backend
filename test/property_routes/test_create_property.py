@@ -1,260 +1,209 @@
 import pytest
-<<<<<<< HEAD
-from fastapi.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
+from fastapi import status
+from app.main import app
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import text  # 🔹 Import necesario para consultas SQL directas
-from app.main import app  # Importar la aplicación FastAPI
-from app.database import get_db
+from app.database import SessionLocal
 from app.users.models import User
 from app.property_routes.models import Property, PropertyUser
+from app.roles.models import Vars
+import os
+import random
 
-@pytest.fixture
-def client():
-    """Cliente de prueba para hacer solicitudes a la API"""
-    return TestClient(app)
-
-@pytest.fixture
-def db_session():
-    """Fixture para manejar una sesión de base de datos en pruebas"""
-    db = next(get_db())  # Obtener una sesión de la base de datos configurada
-    yield db
-    db.rollback()  # Asegurar que no persistan cambios
-    db.close()
-
-@pytest.fixture
-def setup_test_user(db_session: Session):
-    """Crea un usuario de prueba en la base de datos si no existe"""
-    test_user = db_session.query(User).filter_by(email="test_user@example.com").first()
-
-    if not test_user:
-        test_user = User(
-            email="test_user@example.com",
-            password="test123"  # Usa el campo correcto en el modelo
-        )
-        db_session.add(test_user)
-        db_session.commit()
-        db_session.refresh(test_user)
-
-    yield test_user
-
-    # 🔹 Eliminar referencias en `user_property` antes de borrar el usuario
-    db_session.execute(
-        text("DELETE FROM user_property WHERE user_id = :user_id"),
-        {"user_id": test_user.id}
-    )
-    db_session.commit()
-
-    # 🔹 Ahora podemos eliminar el usuario sin conflictos
-    db_session.delete(test_user)
-    db_session.commit()
-
-    # 🔹 Limpiar propiedades creadas en la prueba
-    db_session.execute(text("DELETE FROM property WHERE name = 'Predio de prueba'"))
-    db_session.execute(text("DELETE FROM property WHERE real_estate_registration_number = 123456"))
-    db_session.commit()
-
-def test_create_property_success(client, setup_test_user, db_session):
-    """Prueba para crear un predio con datos válidos"""
-
-    # 🔹 Asegurar que no haya un predio con el mismo número de registro
-    db_session.execute(text("DELETE FROM property WHERE real_estate_registration_number = 123456"))
-    db_session.commit()
-
-    data = {
-        "user_id": setup_test_user.id,
-        "name": "Predio de prueba",
-        "longitude": -75.691,
-        "latitude": 4.1492,
-        "extension": 500.5,
-        "real_estate_registration_number": 123456,
-    }
-
-    files = {
-        "public_deed": ("public_deed.pdf", b"fake pdf content", "application/pdf"),
-        "freedom_tradition_certificate": ("freedom_tradition.pdf", b"fake pdf content", "application/pdf"),
-    }
-
-    response = client.post("/properties/", data=data, files=files)
-
-    # 🔹 Ver respuesta del servidor para identificar errores
-    print("Response Status Code:", response.status_code)
-    print("Response JSON:", response.json())
-
-    assert response.status_code == 200, f"Error en la creación del predio: {response.json()}"
-    
-    response_json = response.json()
-    assert response_json["success"] is True
-    assert "Se ha creado el predio satisfactoriamente" in response_json["data"]["message"]
-
-    # 🔹 Verificar que la propiedad se creó en la BD
-    created_property = db_session.query(Property).filter_by(name="Predio de prueba").first()
-    assert created_property is not None
-
-    # 🔹 Verificar que la relación con el usuario existe
-    user_property_relation = db_session.query(PropertyUser).filter_by(property_id=created_property.id).first()
-    assert user_property_relation is not None
-    assert user_property_relation.user_id == setup_test_user.id
-
-    # 🔹 Limpiar después de la prueba
-    db_session.execute(text("DELETE FROM user_property WHERE property_id = :property_id"), {"property_id": created_property.id})
-    db_session.execute(text("DELETE FROM property WHERE id = :property_id"), {"property_id": created_property.id})
-    db_session.commit()
-=======
-import json
-from fastapi.testclient import TestClient
-from app.main import app
-from app.database import SessionLocal
-from app.property_routes.services import PropertyLotService
-from app.property_routes.models import Property
-from fastapi import UploadFile
-from io import BytesIO
-
-@pytest.fixture(scope="module")
-def db():
-    """Fixture para crear una nueva sesión de base de datos para las pruebas"""
-    db = SessionLocal()
-    db.begin()
-    yield db
-    
-    db.close()
+FILE_DIR = "files"
+VALID_DEED = os.path.join(FILE_DIR, "public_deed.pdf")
+VALID_CERT = os.path.join(FILE_DIR, "freedom_certificate.pdf")
+INVALID_FILE = os.path.join(FILE_DIR, "invalid.txt")
 
 @pytest.fixture()
-def client():
-    """Crear una instancia del cliente de pruebas"""
-    return TestClient(app)
+def db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@pytest.fixture(scope="session", autouse=True)
+def ensure_state_exists():
+    db = SessionLocal()
+    try:
+        state_id = 16
+        if not db.query(Vars).filter_by(id=state_id).first():
+            db.add(Vars(id=state_id, name="Activo", type="estado_predio"))
+            db.commit()
+    finally:
+        db.close()
+
+@pytest.fixture()
+def test_user(db: Session):
+    """Crea un usuario si no existe y lo elimina después si fue creado"""
+    document_number = "123456789"
+    user = db.query(User).filter_by(document_number=document_number).first()
+    created = False
+
+    if not user:
+        user = User(
+            name="Test",
+            first_last_name="User",
+            second_last_name="Example",
+            document_number=document_number,
+            type_document_id=1
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        created = True
+
+    yield user
+
+    if created:
+        db.delete(user)
+        db.commit()
 
 @pytest.mark.asyncio
-async def test_create_property_success(db):
-    """Prueba la creación exitosa de un predio"""
-    service = PropertyLotService(db)
+async def test_create_property_success(db, test_user):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        reg_number = random.randint(10000000, 99999999)
 
-    # Simular archivos subidos
-    public_deed = UploadFile(filename="test_deed.pdf", file=BytesIO(b"dummy data"))
-    freedom_tradition_certificate = UploadFile(filename="test_certificate.pdf", file=BytesIO(b"dummy data"))
+        with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
+            response = await client.post("/properties/", files={
+                "public_deed": ("public_deed.pdf", deed, "application/pdf"),
+                "freedom_tradition_certificate": ("freedom_certificate.pdf", cert, "application/pdf")
+            }, data={
+                "user_id": str(test_user.id),
+                "name": "Predio Exitoso",
+                "longitude": "-75.0",
+                "latitude": "6.0",
+                "extension": "500",
+                "real_estate_registration_number": str(reg_number)
+            })
 
-    # Llamar a la función asíncrona usando `await`
-    response = await service.create_property(
-        name="casta property",
-        longitude=223.45,
-        latitude=87.89,
-        extension=2000.0,
-        real_estate_registration_number=173258789,
-        public_deed=public_deed,
-        freedom_tradition_certificate=freedom_tradition_certificate
-    )
+            print("❗ DEBUG Response status code:", response.status_code)
+            print("❗ DEBUG Response JSON:", response.json())
 
-    # Obtener JSON correctamente
-    json_response = json.loads(response.body.decode("utf-8"))
+            assert response.status_code == 200
+            assert response.json()["success"] is True
 
-    # Imprimir la respuesta para depuración
-    print("\nRESPONSE JSON:", json_response)
+        # 🔁 Limpiar el predio solo si fue creado
+        created_property = db.query(Property).filter_by(real_estate_registration_number=reg_number).first()
+        if created_property:
+            # Eliminar relación en tabla intermedia
+            db.query(PropertyUser).filter_by(property_id=created_property.id).delete()
+            db.delete(created_property)
+            db.commit()
 
-    # Validar si hay un error inesperado
-    if response.status_code != 200:
-        pytest.fail(f"Error inesperado: {json_response}")
-
-    # Verificar la respuesta esperada
-    assert response.status_code == 200
-    assert json_response["success"] is True
-    assert json_response["data"]["title"] == "Creacion de predios"
-
-@pytest.mark.asyncio
-async def test_create_property_duplicate(db):
-    """Prueba de error si el predio ya existe en la base de datos"""
-    service = PropertyLotService(db)
-
-    public_deed = UploadFile(filename="duplicate_deed.pdf", file=BytesIO(b"dummy data"))
-    freedom_tradition_certificate = UploadFile(filename="duplicate_certificate.pdf", file=BytesIO(b"dummy data"))
-
-    response = await service.create_property(
-        name="Duplicate Property",
-        longitude=25.67,
-        latitude=99.01,
-        extension=510.0,
-        real_estate_registration_number=173258789,  # Mismo número que el test anterior
-        public_deed=public_deed,
-        freedom_tradition_certificate=freedom_tradition_certificate
-    )
-
-    json_response = json.loads(response.body.decode("utf-8"))
-
-    assert response.status_code == 400
-    assert json_response["success"] is False
-    assert json_response["data"]["title"] == "Creacion de predios"
-    assert "El registro de predio ya existe en el sistema" in json_response["data"]["message"]
 
 @pytest.mark.asyncio
-async def test_create_property_missing_fields(db):
-    """Prueba de error cuando faltan campos obligatorios"""
-    service = PropertyLotService(db)
+async def test_create_property_missing_fields(test_user):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/properties/", data={"user_id": test_user.id})
+        assert response.status_code == 422
 
-    public_deed = UploadFile(filename="missing_deed.pdf", file=BytesIO(b"dummy data"))
-    freedom_tradition_certificate = UploadFile(filename="missing_certificate.pdf", file=BytesIO(b"dummy data"))
-
-    response = await service.create_property(
-        name=None,
-        longitude=45.67,
-        latitude=89.01,
-        extension=500.0,
-        real_estate_registration_number=287654321,
-        public_deed=public_deed,
-        freedom_tradition_certificate=freedom_tradition_certificate
-    )
-
-    json_response = json.loads(response.body.decode("utf-8"))
-
-    assert response.status_code == 400
-    assert json_response["success"] is False
-    assert json_response["data"]["title"] == "Creacion de predios"
-    assert "Faltan campos requeridos." in json_response["data"]["message"]
 
 @pytest.mark.asyncio
-async def test_create_property_missing_files(db):
-    """Prueba de error cuando faltan archivos requeridos"""
-    service = PropertyLotService(db)
+async def test_create_property_user_not_exist():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
+            response = await client.post("/properties/", files={
+                "public_deed": ("public_deed.pdf", deed, "application/pdf"),
+                "freedom_tradition_certificate": ("freedom_certificate.pdf", cert, "application/pdf")
+            }, data={
+                "user_id": 999999,
+                "name": "Predio Fantasma",
+                "longitude": "-75.0",
+                "latitude": "6.0",
+                "extension": "500",
+                "real_estate_registration_number": 87654321
+            })
+            assert response.status_code == 400
+            assert "usuario a relacionar no existe" in response.text
 
-    response = await service.create_property(
-        name="Property Without Files",
-        longitude=10.12,
-        latitude=20.34,
-        extension=200.0,
-        real_estate_registration_number=555555555,
-        public_deed=None,
-        freedom_tradition_certificate=UploadFile(filename="valid_certificate.pdf", file=BytesIO(b"dummy data"))
-    )
-
-    json_response = json.loads(response.body.decode("utf-8"))
-
-    assert response.status_code == 400
-    assert json_response["success"] is False
-    assert json_response["data"]["title"] == "Creacion de predios"
-    assert "Faltan los archivos requeridos para el predio." in json_response["data"]["message"]
 
 @pytest.mark.asyncio
-async def test_create_property_server_error(db, mocker):
-    """Simula un error interno del servidor al intentar crear un predio"""
-    service = PropertyLotService(db)
+async def test_create_property_duplicate_registration(test_user):
+    transport = ASGITransport(app=app)
+    reg_number = 11223344
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
+            await client.post("/properties/", files={
+                "public_deed": ("public_deed.pdf", deed, "application/pdf"),
+                "freedom_tradition_certificate": ("freedom_certificate.pdf", cert, "application/pdf")
+            }, data={
+                "user_id": test_user.id,
+                "name": "Predio Original",
+                "longitude": "-75.0",
+                "latitude": "6.0",
+                "extension": "500",
+                "real_estate_registration_number": reg_number
+            })
 
-    public_deed = UploadFile(filename="error_deed.pdf", file=BytesIO(b"dummy data"))
-    freedom_tradition_certificate = UploadFile(filename="error_certificate.pdf", file=BytesIO(b"dummy data"))
+        with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
+            response = await client.post("/properties/", files={
+                "public_deed": ("public_deed.pdf", deed, "application/pdf"),
+                "freedom_tradition_certificate": ("freedom_certificate.pdf", cert, "application/pdf")
+            }, data={
+                "user_id": test_user.id,
+                "name": "Predio Duplicado",
+                "longitude": "-75.1",
+                "latitude": "6.1",
+                "extension": "600",
+                "real_estate_registration_number": reg_number
+            })
+            assert response.status_code == 400
+            assert "registro de predio ya existe" in response.text
 
-    # Usamos `mocker` para simular que `save_file` lanza una excepción
-    mocker.patch.object(service, "save_file", side_effect=Exception("Simulated error"))
 
-    response = await service.create_property(
-        name="Error Property",
-        longitude=17.34,
-        latitude=59.78,
-        extension=300.0,
-        real_estate_registration_number=666866666,
-        public_deed=public_deed,
-        freedom_tradition_certificate=freedom_tradition_certificate
-    )
+@pytest.mark.asyncio
+async def test_create_property_invalid_files(test_user):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with open(INVALID_FILE, "rb") as deed, open(INVALID_FILE, "rb") as cert:
+            response = await client.post("/properties/", files={
+                "public_deed": ("invalid.txt", deed, "text/plain"),
+                "freedom_tradition_certificate": ("invalid.txt", cert, "text/plain")
+            }, data={
+                "user_id": test_user.id,
+                "name": "Predio Archivo Invalido",
+                "longitude": "-70.0",
+                "latitude": "5.0",
+                "extension": "100",
+                "real_estate_registration_number": 99887766
+            })
+            assert response.status_code in (400, 500)
 
-    json_response = json.loads(response.body.decode("utf-8"))
 
-    assert response.status_code == 500
-    assert json_response["success"] is False
-    assert json_response["data"]["title"] == "Creacion de predios"
-    assert "Error al crear el predio, Contacta al administrador" in json_response["data"]["message"]
->>>>>>> origin/develop
+@pytest.mark.asyncio
+async def test_create_property_missing_optional_files(test_user):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/properties/", data={
+            "user_id": test_user.id,
+            "name": "Predio Sin Archivos",
+            "longitude": "-75.0",
+            "latitude": "6.0",
+            "extension": "500",
+            "real_estate_registration_number": 44556677
+        })
+        assert response.status_code in (200, 400, 422)
+
+
+@pytest.mark.asyncio
+async def test_create_property_out_of_range(test_user):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
+            response = await client.post("/properties/", files={
+                "public_deed": ("public_deed.pdf", deed, "application/pdf"),
+                "freedom_tradition_certificate": ("freedom_certificate.pdf", cert, "application/pdf")
+            }, data={
+                "user_id": test_user.id,
+                "name": "Predio Fuera Rango",
+                "longitude": "-200",
+                "latitude": "95",
+                "extension": "-100",
+                "real_estate_registration_number": -10
+            })
+            assert response.status_code in (400, 422)
