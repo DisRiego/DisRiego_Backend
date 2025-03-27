@@ -41,7 +41,7 @@ def create_test_property(db_session: Session):
         type_document_id=1,
         document_number=generate_random_document_number(),
         phone="3216549870",
-        status_id=1  # ✅ Campo correcto
+        status_id=1
     )
     db_session.add(user)
     db_session.commit()
@@ -97,3 +97,102 @@ def test_get_existing_property_by_id(db_session, create_test_property):
     assert json_data["data"]["name"] == test_data["property"].name
     assert json_data["data"]["owner_document_number"] == user.document_number
     assert json_data["data"]["owner_id"] == user.id
+
+def test_get_nonexistent_property_by_id():
+    """Intentar obtener un predio con un ID inexistente"""
+
+    fake_id = 999999  # ID que con alta probabilidad no existe
+    response = client.get(f"/properties/{fake_id}")
+
+    assert response.status_code == 404
+    json_data = response.json()
+    assert json_data["success"] is False
+    assert json_data["data"] == "Predio no encontrado"
+
+def test_get_all_properties(db_session, create_test_property):
+    """Obtener todos los predios y validar estructura de respuesta"""
+
+    response = client.get("/properties/")
+    assert response.status_code == 200
+
+    json_data = response.json()
+    assert "success" in json_data
+    assert json_data["success"] is True
+    assert "data" in json_data
+    assert isinstance(json_data["data"], list)
+    assert len(json_data["data"]) > 0
+
+    # Validar estructura del primer predio
+    property_item = json_data["data"][0]
+    expected_keys = {
+        "id", "name", "longitude", "latitude", "extension",
+        "real_estate_registration_number", "public_deed", "freedom_tradition_certificate",
+        "state", "state_name", "owner_document_number"
+    }
+    assert expected_keys.issubset(property_item.keys())
+
+def test_get_properties_for_user(db_session, create_test_property):
+    """Obtener predios asignados a un usuario específico"""
+
+    test_data = create_test_property
+    user = test_data["user"]
+    property_obj = test_data["property"]
+
+    response = client.get(f"/properties/user/{user.id}")
+    assert response.status_code == 200
+
+    json_data = response.json()
+    assert json_data["success"] is True
+    assert "data" in json_data
+    assert isinstance(json_data["data"], list)
+    assert len(json_data["data"]) > 0
+
+    # Verificar que el predio creado esté presente en los datos
+    found = False
+    for item in json_data["data"]:
+        if item["id"] == property_obj.id:
+            found = True
+            expected_keys = {
+                "id", "name", "longitude", "latitude", "extension",
+                "real_estate_registration_number", "public_deed",
+                "freedom_tradition_certificate", "state", "state_name"
+            }
+            assert expected_keys.issubset(item.keys())
+            break
+
+    assert found, "El predio creado no fue encontrado en la respuesta del usuario"
+@pytest.fixture
+def create_user_without_properties(db_session: Session):
+    """Crea un usuario sin predios asignados y lo elimina después de la prueba"""
+
+    user = User(
+        name="UsuarioSinPredios",
+        first_last_name="Test",
+        second_last_name="Unassigned",
+        email=generate_random_email(),
+        password="hashed_password",
+        type_document_id=1,
+        document_number=generate_random_document_number(),
+        phone="3000000000",
+        status_id=1
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    yield user
+
+    db_session.delete(user)
+    db_session.commit()
+
+def test_get_properties_for_user_without_properties(db_session, create_user_without_properties):
+    """Debe retornar lista vacía si el usuario no tiene predios asignados"""
+
+    user = create_user_without_properties
+
+    response = client.get(f"/properties/user/{user.id}")
+    assert response.status_code == 404
+
+    json_data = response.json()
+    assert json_data["success"] is False
+    assert json_data["data"] == []
