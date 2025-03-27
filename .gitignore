@@ -5,8 +5,10 @@ __pycache__/
 app/__pycache__
 app/roles/__pycache__
 env
+uploads
 .pytest_cache/
 
 /.env
 .env
+config/firebase_riego.json
 
