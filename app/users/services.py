@@ -607,7 +607,7 @@ class UserService:
             pre_register_token.used = True
 
             activation_token = str(uuid.uuid4())
-            expiration = datetime.utcnow() + timedelta(days=7)
+            expiration = datetime.utcnow() + timedelta(days=1)
 
             new_activation_token = ActivationToken(
                 token=activation_token,
