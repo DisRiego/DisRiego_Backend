@@ -1,7 +1,6 @@
-
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 
 # Modelo para el login de usuario
 class UserLogin(BaseModel):
@@ -36,3 +35,35 @@ class ChangePasswordRequest(BaseModel):
 # Respuesta de cambio de contraseña
 class ChangePasswordResponse(BaseModel):
     message: str
+
+# Esquema para iniciar el proceso de login con OAuth
+class OAuthLoginRequest(BaseModel):
+    """Solicitud para iniciar el proceso de login con OAuth (Google/Microsoft)"""
+    provider: str = Field(..., description="Proveedor de OAuth: 'google' o 'microsoft'")
+    redirect_uri: str = Field(..., description="URI de redirección después de la autenticación")
+
+# Esquema para el callback después de autenticación OAuth
+class OAuthCallbackRequest(BaseModel):
+    """Solicitud de callback después de autenticación OAuth"""
+    provider: str = Field(..., description="Proveedor de OAuth: 'google' o 'microsoft'")
+    code: str = Field(..., description="Código de autorización recibido")
+    state: Optional[str] = None
+
+# Información del usuario obtenida del proveedor OAuth
+class OAuthUserInfo(BaseModel):
+    """Información del usuario obtenida del proveedor OAuth"""
+    provider: str
+    provider_user_id: str
+    email: EmailStr
+    name: Optional[str] = None
+    picture: Optional[str] = None
+
+# Respuesta después de la autenticación con OAuth
+class SocialLoginResponse(BaseModel):
+    """Respuesta después de la autenticación con OAuth"""
+    success: bool
+    message: str
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    user_info: Optional[Dict[str, Any]] = None
+    is_new_user: Optional[bool] = None
