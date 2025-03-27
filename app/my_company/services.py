@@ -85,7 +85,8 @@ class CompanyService(BaseService):
             )
             if company_cert:
                 company_data["certificate"] = {
-                    "serial_number": company_cert.digital_certificate.serial_number
+                    "serial_number": company_cert.digital_certificate.serial_number,
+                    "digital_certificate_id": company_cert.digital_certificate.id
                 }
             else:
                 company_data["certificate"] = None
