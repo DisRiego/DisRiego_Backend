@@ -667,7 +667,19 @@ class PropertyLotService:
                         }
                     }
                 )
-            
+            # Validar coordenadas
+            if not (-180 <= longitude <= 180) or not (-90 <= latitude <= 90):
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "data": {
+                            "title": "Edición de predio",
+                            "message": "Las coordenadas proporcionadas están fuera del rango permitido"
+                        }
+                    }
+                )
+
             # Verificar si el número de registro de propiedad es único, pero no en el predio actual
             existing_property = self.db.query(Property) \
                 .filter(Property.real_estate_registration_number == str(real_estate_registration_number)) \
