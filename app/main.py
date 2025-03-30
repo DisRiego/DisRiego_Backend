@@ -27,6 +27,7 @@ app.include_router(roles_router)
 app.include_router(users_router)
 app.include_router(auth_router)
 app.include_router(property_lot_router)
+app.include_router(devices_router) 
 app.include_router(my_company_router)
 
 
