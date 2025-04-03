@@ -220,20 +220,20 @@ class PropertyLotService:
         Actualiza el estado del predio.
         Si se intenta inactivar (new_state == False), se verifica que no tenga lotes asociados activos.
         Se mapea new_state a:
-        - True  -> state = 16 (Activo)
-        - False -> state = 17 (Inactivo)
+        - True  -> state = 3 (Activo)
+        - False -> state = 4 (Inactivo)
         """
         try:
             property_obj = self.db.query(Property).filter(Property.id == property_id).first()
             if not property_obj:
                 raise HTTPException(status_code=404, detail="Predio no encontrado.")
             
-            # Si se intenta inactivar, verificar que no existan lotes asociados activos (state == 18)
+            # Si se intenta inactivar, verificar que no existan lotes asociados activos (state == 5)
             if new_state is False:
                 active_lots = (
                     self.db.query(Lot)
                     .join(PropertyLot, PropertyLot.lot_id == Lot.id)
-                    .filter(PropertyLot.property_id == property_id, Lot.state == 18)
+                    .filter(PropertyLot.property_id == property_id, Lot.state == 5)
                     .all()
                 )
                 if active_lots:
@@ -242,7 +242,7 @@ class PropertyLotService:
                         detail="No se puede inactivar el predio porque tiene lotes activos."
                     )
             # Mapear el valor booleano a la columna state:
-            property_obj.state = 16 if new_state else 17
+            property_obj.state = 3 if new_state else 4
             self.db.commit()
             self.db.refresh(property_obj)
             return property_obj
@@ -256,8 +256,8 @@ class PropertyLotService:
         """
         Actualiza el estado del lote.
         Se mapea new_state a:
-        - True  -> state = 18 (Activo)
-        - False -> state = 19 (Inactivo)
+        - True  -> state = 5 (Activo)
+        - False -> state = 6 (Inactivo)
         Además, si se intenta activar (new_state == True), se verifica que el predio asociado esté activo (state == 16).
         """
         try:
@@ -272,10 +272,10 @@ class PropertyLotService:
                 property_obj = self.db.query(Property).filter(Property.id == association.property_id).first()
                 if not property_obj:
                     raise HTTPException(status_code=400, detail="Predio asociado no encontrado.")
-                if property_obj.state != 16:  # El predio debe estar activo (16)
+                if property_obj.state != 3:  # El predio debe estar activo (3)
                     raise HTTPException(status_code=400, detail="No se puede activar el lote porque el predio está desactivado.")
             
-            lot_obj.state = 18 if new_state else 19
+            lot_obj.state = 5 if new_state else 6
             self.db.commit()
             self.db.refresh(lot_obj)
             return lot_obj
@@ -516,20 +516,26 @@ class PropertyLotService:
             )        
 
     def get_lots_property(self, property_id: int):
-        """Obtener todos los lotes de un predio incluyendo los nombres descriptivos"""
+        """Obtener todos los lotes de un predio incluyendo los nombres descriptivos y la información del propietario"""
         try:
             lots = (
                 self.db.query(
                     Lot,
                     TypeCrop.name.label("nombre_tipo_cultivo"),
                     PaymentInterval.name.label("nombre_intervalo_pago"),
-                    Vars.name.label("nombre_estado")
+                    Vars.name.label("nombre_estado"),
+                    User.first_last_name.label("owner_first_last_name"),  # Primer apellido del propietario
+                    User.second_last_name.label("owner_second_last_name"),  # Segundo apellido del propietario
+                    User.name.label("owner_name"),  # Nombre del propietario
+                    User.document_number.label("owner_document_number")  # Número de documento del propietario
                 )
                 .join(PropertyLot, PropertyLot.lot_id == Lot.id)
                 # Usamos outerjoin en caso de que algún lote no tenga asignado tipo de cultivo o intervalo de pago
                 .outerjoin(TypeCrop, Lot.type_crop_id == TypeCrop.id)
                 .outerjoin(PaymentInterval, Lot.payment_interval == PaymentInterval.id)
                 .join(Vars, Lot.state == Vars.id)
+                .join(PropertyUser, PropertyLot.property_id == PropertyUser.property_id)  # Relación con PropertyUser
+                .join(User, PropertyUser.user_id == User.id)  # Relación con User para obtener el propietario
                 .filter(PropertyLot.property_id == property_id)
                 .all()
             )
@@ -545,11 +551,15 @@ class PropertyLotService:
 
             # Convertir resultados a una lista de diccionarios
             results = []
-            for lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado in lots:
+            for lot, nombre_tipo_cultivo, nombre_intervalo_pago, nombre_estado, owner_first_last_name, owner_second_last_name, owner_name, owner_document_number in lots:
                 lot_data = jsonable_encoder(lot)
                 lot_data["nombre_tipo_cultivo"] = nombre_tipo_cultivo
                 lot_data["nombre_intervalo_pago"] = nombre_intervalo_pago
                 lot_data["nombre_estado"] = nombre_estado
+                lot_data["owner_first_last_name"] = owner_first_last_name  # Primer apellido del propietario
+                lot_data["owner_second_last_name"] = owner_second_last_name  # Segundo apellido del propietario
+                lot_data["owner_name"] = owner_name  # Nombre del propietario
+                lot_data["owner_document_number"] = owner_document_number  # Documento del propietario
                 results.append(lot_data)
 
             return JSONResponse(
@@ -571,6 +581,7 @@ class PropertyLotService:
                     }
                 }
             )
+
 
 
     async def edit_lot(self, lot_id: int, name: str, longitude: float, latitude: float, extension: float, 
@@ -783,16 +794,19 @@ class PropertyLotService:
             )
         
     def get_property_by_id(self, property_id: int):
-        """Obtener la información de un predio específico por su ID, incluyendo el estado, el documento y el id del dueño."""
+        """Obtener la información de un predio específico por su ID, incluyendo el estado, el documento, el id y el nombre del dueño."""
         try:
             # Realizamos un join similar a get_all_properties para obtener información adicional,
-            # incluyendo el id del dueño (User.id)
+            # incluyendo el id, nombre, primer apellido y segundo apellido del dueño (User.id, User.first_last_name, User.second_last_name)
             result = (
                 self.db.query(
                     Property,
                     Vars.name.label("state_name"),
                     User.document_number.label("owner_document_number"),
-                    User.id.label("owner_id")
+                    User.id.label("owner_id"),
+                    User.first_last_name.label("owner_first_last_name"),  # Primer apellido
+                    User.second_last_name.label("owner_second_last_name"),  # Segundo apellido
+                    User.name.label("owner_name")  # Nombre del dueño
                 )
                 .join(PropertyUser, Property.id == PropertyUser.property_id)
                 .join(User, PropertyUser.user_id == User.id)
@@ -800,23 +814,35 @@ class PropertyLotService:
                 .filter(Property.id == property_id)
                 .first()
             )
+            
             if not result:
                 return JSONResponse(
                     status_code=404,
                     content={"success": False, "data": "Predio no encontrado"}
                 )
-            property_obj, state_name, owner_document_number, owner_id = result
+            
+            property_obj, state_name, owner_document_number, owner_id, owner_first_last_name, owner_second_last_name, owner_name = result
             property_dict = jsonable_encoder(property_obj)
+            
+            # Agregamos los datos del propietario
             property_dict["state_name"] = state_name
             property_dict["owner_document_number"] = owner_document_number
             property_dict["owner_id"] = owner_id
+            property_dict["owner_first_last_name"] = owner_first_last_name  
+            property_dict["owner_second_last_name"] = owner_second_last_name  
+            property_dict["owner_name"] = owner_name  
 
             return JSONResponse(
                 status_code=200,
                 content={"success": True, "data": property_dict}
             )
+        
         except Exception as e:
             return JSONResponse(
                 status_code=500,
-                content={"success": False, "data": f"Error al obtener la información del predio: {str(e)}"}
+                content={
+                    "success": False,
+                    "data": f"Error al obtener la información del predio: {str(e)}"
+                }
             )
+
