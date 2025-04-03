@@ -241,7 +241,7 @@ async def delete_certificate(
 def update_certificate_status(certificate_id: int, new_status: int = Form(...), db: Session = Depends(get_db)):
     """
     Actualiza el estado de un certificado digital.
-    new_status debe ser 22 (Activo) o 23 (Inactivo).
+    new_status debe ser 9 (Activo) o 10 (Inactivo).
     """
     certificate_service = services.CertificateService(db)
     return certificate_service.update_certificate_status(certificate_id, new_status)
@@ -284,12 +284,12 @@ def create_type_crop(
 @router.patch("/type-crops/{type_id}/state", summary="Actualizar estado del tipo de cultivo")
 def update_type_crop_state(
     type_id: int,
-    new_state: int = Form(...),  # Espera 20 (activo) o 21 (inactivo)
+    new_state: int = Form(...),  # Espera 7 (activo) o 8 (inactivo)
     db: Session = Depends(get_db)
 ):
     """
     Actualiza el estado (activo/inactivo) de un tipo de cultivo.
-    El parámetro new_state debe ser 20 (activo) o 21 (inactivo).
+    El parámetro new_state debe ser 7 (activo) o 8 (inactivo).
     """
     type_service = services.TypeCropService(db)
     return type_service.update_state(type_id, new_state)

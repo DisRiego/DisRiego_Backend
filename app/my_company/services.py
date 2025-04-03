@@ -555,15 +555,15 @@ class CertificateService(BaseService):
     def update_certificate_status(self, certificate_id: int, new_status: int):
         """
         Actualiza el estado de un certificado digital.
-        Los valores válidos para new_status son 22 (Activo) y 23 (Inactivo).
+        Los valores válidos para new_status son 9 (Activo) y 10 (Inactivo).
         Devuelve la información del certificado, incluyendo el nombre del estado.
         """
-        if new_status not in (22, 23):
+        if new_status not in (9, 10):
             return JSONResponse(
                 status_code=400,
                 content={
                     "success": False,
-                    "message": "El estado debe ser 22 (Activo) o 23 (Inactivo)",
+                    "message": "El estado debe ser 9 (Activo) o 10 (Inactivo)",
                     "data": None
                 }
             )
@@ -800,14 +800,14 @@ class TypeCropService:
     def update_state(self, type_id: int, new_state: int):
         """
         Actualiza el estado de un tipo de cultivo.
-        Se espera que new_state sea 20 (activo) o 21 (inactivo).
+        Se espera que new_state sea 7 (activo) o 8 (inactivo).
         """
-        if new_state not in (20, 21):
+        if new_state not in (7, 8):
             return JSONResponse(
                 status_code=400,
                 content={
                     "success": False,
-                    "message": "El estado debe ser 20 (activo) o 21 (inactivo)",
+                    "message": "El estado debe ser 7 (activo) o 8 (inactivo)",
                     "data": None
                 }
             )
