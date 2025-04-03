@@ -272,7 +272,7 @@ class PropertyLotService:
                 property_obj = self.db.query(Property).filter(Property.id == association.property_id).first()
                 if not property_obj:
                     raise HTTPException(status_code=400, detail="Predio asociado no encontrado.")
-                if property_obj.state != 4:  # El predio debe estar activo (3)
+                if property_obj.state != 3:  # El predio debe estar activo (3)
                     raise HTTPException(status_code=400, detail="No se puede activar el lote porque el predio está desactivado.")
             
             lot_obj.state = 5 if new_state else 6
