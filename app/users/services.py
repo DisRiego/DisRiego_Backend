@@ -8,6 +8,9 @@ from fastapi import HTTPException, Depends, status, UploadFile
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import desc
+from app.users.models import Notification
+from app.users import schemas
 from app.users.models import Gender, Status, TypeDocument, User, PasswordReset, PreRegisterToken, ActivationToken
 from app.users.schemas import UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateResponse, PreRegisterResponse, ActivateAccountResponse
 from app.roles.models import Role
@@ -718,3 +721,144 @@ class UserService:
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al obtener géneros: {str(e)}")
+
+def get_user_notifications(self, user_id: int):
+    """
+    Get all notifications for a specific user
+    
+    Args:
+        user_id: ID of the user
+        
+    Returns:
+        Dictionary with success status and list of notifications
+    """
+    try:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "data": [], "unread_count": 0, "message": "Usuario no encontrado"}
+        
+        notifications = self.db.query(Notification).filter(
+            Notification.user_id == user_id
+        ).order_by(desc(Notification.created_at)).all()
+        
+        # Count unread notifications
+        unread_count = self.db.query(Notification).filter(
+            Notification.user_id == user_id,
+            Notification.read == False
+        ).count()
+        
+        return {"success": True, "data": notifications, "unread_count": unread_count}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail={"success": False, "data": {
+                "title": "Error al obtener notificaciones",
+                "message": str(e),
+            }}
+        )
+
+def create_notification(self, notification_data: schemas.NotificationCreate):
+    """
+    Create a new notification
+    
+    Args:
+        notification_data: NotificationCreate schema with notification details
+        
+    Returns:
+        Dictionary with success status and created notification ID
+    """
+    try:
+        user = self.db.query(User).filter(User.id == notification_data.user_id).first()
+        if not user:
+            return {"success": False, "data": None, "message": "Usuario no encontrado"}
+        
+        new_notification = Notification(
+            user_id=notification_data.user_id,
+            title=notification_data.title,
+            message=notification_data.message,
+            type=notification_data.type,
+            read=False,
+            created_at=datetime.utcnow()
+        )
+        
+        self.db.add(new_notification)
+        self.db.commit()
+        self.db.refresh(new_notification)
+        
+        return {"success": True, "data": {"id": new_notification.id}}
+    except Exception as e:
+        self.db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail={"success": False, "data": {
+                "title": "Error al crear notificación",
+                "message": str(e),
+            }}
+        )
+
+def mark_notifications_as_read(self, user_id: int, notification_ids: List[int] = None, mark_all: bool = False):
+    """
+    Mark specific or all notifications as read for a user
+    
+    Args:
+        user_id: ID of the user
+        notification_ids: List of notification IDs to mark as read (optional)
+        mark_all: Flag to mark all user's notifications as read
+        
+    Returns:
+        Dictionary with success status and message
+    """
+    try:
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return {"success": False, "message": "Usuario no encontrado"}
+        
+        if mark_all:
+            # Mark all notifications as read
+            self.db.query(Notification).filter(
+                Notification.user_id == user_id
+            ).update({"read": True})
+        elif notification_ids:
+            # Mark specific notifications as read
+            self.db.query(Notification).filter(
+                Notification.id.in_(notification_ids),
+                Notification.user_id == user_id
+            ).update({"read": True})
+        
+        self.db.commit()
+        return {"success": True, "message": "Notificaciones marcadas como leídas"}
+    except Exception as e:
+        self.db.rollback()
+        raise HTTPException(
+            status_code=500, 
+            detail={"success": False, "data": {
+                "title": "Error al marcar notificaciones como leídas",
+                "message": str(e),
+            }}
+        )
+
+def get_unread_notification_count(self, user_id: int):
+    """
+    Get count of unread notifications for a user
+    
+    Args:
+        user_id: ID of the user
+        
+    Returns:
+        Dictionary with success status and count
+    """
+    try:
+        count = self.db.query(Notification).filter(
+            Notification.user_id == user_id,
+            Notification.read == False
+        ).count()
+        
+        return {"success": True, "count": count}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail={"success": False, "data": {
+                "title": "Error al obtener conteo de notificaciones",
+                "message": str(e),
+            }}
+        )
