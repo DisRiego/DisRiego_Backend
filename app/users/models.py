@@ -49,6 +49,7 @@ class User(Base):
     activation_tokens = relationship("ActivationToken", back_populates="user")
     social_accounts = relationship("SocialAccount", back_populates="user", cascade="all, delete-orphan")
     __table_args__ = {'extend_existing': True}
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
 class RevokedToken(Base):
     """Modelo para almacenar tokens revocados (para cierre de sesión)"""
@@ -156,3 +157,17 @@ class SocialAccount(Base):
     
     def __repr__(self):
         return f"<SocialAccount(id={self.id}, provider={self.provider}, email={self.email})>"
+
+
+class Notification(Base):
+    """Model for user notifications"""
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    title = Column(String, nullable=False)
+    message = Column(String, nullable=False)  
+    type = Column(String, nullable=False) 
+    read = Column(Boolean, nullable=True) 
+    created_at = Column(DateTime, nullable=True)  
+    user = relationship("User", back_populates="notifications")
