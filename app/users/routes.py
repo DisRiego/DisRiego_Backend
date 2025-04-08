@@ -224,12 +224,14 @@ def create_user_by_admin(
             date_issuance_document=user_data.date_issuance_document,
             birthday=user_data.birthday,
             gender_id=user_data.gender_id,
-            roles=user_data.roles
+            roles=user_data.roles,
+            admin_id=current_user["id"]  
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el usuario: {str(e)}")
+
 
 @router.put("/admin/edit/{user_id}", summary="Editar información completa del usuario (Admin)")
 def admin_edit_user(
@@ -261,14 +263,15 @@ def admin_edit_user(
             "gender_id": update_data.gender_id,    
         }
         if update_data.roles:
-            
             roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
             update_fields["roles"] = roles_obj
 
-        result = user_service.update_user(user_id, **update_fields)
+        # Se pasa admin_update=True para generar la notificación correspondiente
+        result = user_service.update_user(user_id, admin_update=True, **update_fields)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+
 
 @router.get("/type-documents", tags=["Users"])
 def get_document_types(db: Session = Depends(get_db)):

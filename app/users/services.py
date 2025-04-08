@@ -232,8 +232,8 @@ class UserService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Contacta con el administrador: {str(e)}")
 
-    def update_user(self, user_id: int, **kwargs):
-        """Actualiza los detalles de un usuario"""
+    def update_user(self, user_id: int, admin_update: bool = False, **kwargs):
+        """Actualiza los detalles de un usuario y, si admin_update es True, envía una notificación."""
         try:
             db_user = self.db.query(User).filter(User.id == user_id).first()
             if not db_user:
@@ -242,6 +242,19 @@ class UserService:
                 setattr(db_user, key, value)
             self.db.commit()
             self.db.refresh(db_user)
+            
+            if admin_update:
+                # Registro para ver que se dispara la notificación
+                print(f"[DEBUG] Creando notificación para el usuario {user_id}.")
+                notification_data = schemas.NotificationCreate(
+                    user_id=user_id,
+                    title="Información actualizada",
+                    message="Su información ha sido actualizada por un administrador.",
+                    type="admin_edit"  # Puedes modificar según tu convención
+                )
+                notification_res = self.create_notification(notification_data)
+                print(f"[DEBUG] Resultado de la notificación: {notification_res}")
+                
             return {"success": True, "data": "Usuario actualizado correctamente"}
         except Exception as e:
             self.db.rollback()
@@ -249,6 +262,7 @@ class UserService:
                 "title": "Contacta con el administrador",
                 "message": str(e),
             }})
+
 
     def list_users(self):
         try:
@@ -330,7 +344,6 @@ class UserService:
             })
 
     def change_user_status(self, user_id: int, new_status: int):
-        """Cambia el estado de un usuario"""
         try:
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
@@ -344,10 +357,22 @@ class UserService:
             self.db.commit()
             self.db.refresh(user)
 
+            # Verificar si el nuevo estado representa una inhabilitación; en este ejemplo, usamos new_status == 0.
+            if new_status == 0:
+                notification_data = schemas.NotificationCreate(
+                    user_id=user_id,
+                    title="Cuenta inhabilitada",
+                    message="Su cuenta ha sido inhabilitada por un administrador.",
+                    type="admin_inactivation"
+                )
+                self.create_notification(notification_data)
+
             return {"success": True, "data": "Estado de usuario actualizado correctamente."}
+
         except Exception as e:
             self.db.rollback()
             raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del usuario: {str(e)}")
+
 
     def get_type_documents(self):
         """Obtiene todos los tipos de documentos"""
@@ -384,26 +409,42 @@ class UserService:
 
     def update_password(self, token: str, new_password: str):
         """
-        Actualiza la contraseña del usuario utilizando el token de restablecimiento.
+        Actualiza la contraseña del usuario utilizando el token de restablecimiento y genera una notificación.
         """
         password_reset = self.db.query(PasswordReset).filter(PasswordReset.token == token).first()
         if not password_reset:
             raise HTTPException(status_code=404, detail="Token inválido o expirado")
         if password_reset.expiration < datetime.utcnow():
             raise HTTPException(status_code=400, detail="El token ha expirado")
+
         user = self.db.query(User).filter(User.email == password_reset.email).first()
         if not user:
             raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+        # Actualizar contraseña
         new_salt, new_hash = self.hash_password(new_password)
         user.password = new_hash
         user.password_salt = new_salt
         self.db.commit()
+        
+        # Eliminar el token usado
         self.db.delete(password_reset)
         self.db.commit()
+
+        
+        notification_data = schemas.NotificationCreate(
+            user_id=user.id,
+            title="Cambio de contraseña",
+            message="Tu contraseña ha sido actualizada correctamente. Si no realizaste este cambio, contacta con soporte.",
+            type="security"
+        )
+        self.create_notification(notification_data)
+
         return {"message": "Contraseña actualizada correctamente"}
 
+
     def change_user_password(self, user_id: int, password_data: ChangePasswordRequest):
-        """Actualiza la contraseña de un usuario verificando la contraseña actual."""
+        """Actualiza la contraseña de un usuario verificando la contraseña actual y genera una notificación."""
         try:
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
@@ -422,6 +463,16 @@ class UserService:
             user.password = new_hash
             user.password_salt = new_salt
             self.db.commit()
+
+            
+            notification_data = schemas.NotificationCreate(
+                user_id=user.id,
+                title="Cambio de contraseña",
+                message="Has actualizado tu contraseña correctamente. Si no realizaste este cambio, contacta con soporte.",
+                type="security"
+            )
+            self.create_notification(notification_data)
+
             return {"success": True, "data": "Contraseña actualizada correctamente"}
         except Exception as e:
             self.db.rollback()
@@ -429,6 +480,7 @@ class UserService:
                 "title": "Error al actualizar la contraseña",
                 "message": str(e)
             }})
+
 
     async def validate_for_pre_register(self, document_type_id: int, document_number: str, 
                                         date_issuance_document: datetime) -> PreRegisterResponse:
@@ -673,9 +725,10 @@ class UserService:
             )
 
     def create_user_by_admin(self, name: str, first_last_name: str, second_last_name: str, 
-                                type_document_id: int, document_number: str, date_issuance_document: datetime,
-                                birthday: datetime, gender_id: int, roles: List[int]):
+                            type_document_id: int, document_number: str, date_issuance_document: datetime,
+                            birthday: datetime, gender_id: int, roles: List[int], admin_id: int):
         try:
+            # Se crea el usuario según los parámetros
             db_user = User(
                 name=name,
                 first_last_name=first_last_name,
@@ -685,7 +738,7 @@ class UserService:
                 date_issuance_document=date_issuance_document,
                 birthday=birthday,
                 gender_id=gender_id,
-                status_id=4  # Se asigna el status "Activo" al crear el usuario
+                status_id=4  # Estado "Activo" para nuevos usuarios
             )
 
             if roles:
@@ -695,6 +748,15 @@ class UserService:
             self.db.add(db_user)
             self.db.commit()
             self.db.refresh(db_user)
+
+            
+            notification_data = schemas.NotificationCreate(
+                user_id=admin_id,  
+                title="Nuevo usuario creado",
+                message=f"Se ha creado un nuevo usuario: {db_user.name} {db_user.first_last_name}.",
+                type="user_creation"
+            )
+            self.create_notification(notification_data)
 
             return {"success": True, "message": "Usuario creado correctamente", "user_id": db_user.id}
 
@@ -707,8 +769,8 @@ class UserService:
                     "data": {
                         "title": "Error al crear usuario",
                         "message": str(e),
-                    },
-                },
+                    }
+                }
             )
 
     def get_genders(self):
@@ -722,143 +784,143 @@ class UserService:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Error al obtener géneros: {str(e)}")
 
-def get_user_notifications(self, user_id: int):
-    """
-    Get all notifications for a specific user
-    
-    Args:
-        user_id: ID of the user
+    def get_user_notifications(self, user_id: int):
+        """
+        Get all notifications for a specific user
         
-    Returns:
-        Dictionary with success status and list of notifications
-    """
-    try:
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if not user:
-            return {"success": False, "data": [], "unread_count": 0, "message": "Usuario no encontrado"}
-        
-        notifications = self.db.query(Notification).filter(
-            Notification.user_id == user_id
-        ).order_by(desc(Notification.created_at)).all()
-        
-        # Count unread notifications
-        unread_count = self.db.query(Notification).filter(
-            Notification.user_id == user_id,
-            Notification.read == False
-        ).count()
-        
-        return {"success": True, "data": notifications, "unread_count": unread_count}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail={"success": False, "data": {
-                "title": "Error al obtener notificaciones",
-                "message": str(e),
-            }}
-        )
-
-def create_notification(self, notification_data: schemas.NotificationCreate):
-    """
-    Create a new notification
-    
-    Args:
-        notification_data: NotificationCreate schema with notification details
-        
-    Returns:
-        Dictionary with success status and created notification ID
-    """
-    try:
-        user = self.db.query(User).filter(User.id == notification_data.user_id).first()
-        if not user:
-            return {"success": False, "data": None, "message": "Usuario no encontrado"}
-        
-        new_notification = Notification(
-            user_id=notification_data.user_id,
-            title=notification_data.title,
-            message=notification_data.message,
-            type=notification_data.type,
-            read=False,
-            created_at=datetime.utcnow()
-        )
-        
-        self.db.add(new_notification)
-        self.db.commit()
-        self.db.refresh(new_notification)
-        
-        return {"success": True, "data": {"id": new_notification.id}}
-    except Exception as e:
-        self.db.rollback()
-        raise HTTPException(
-            status_code=500, 
-            detail={"success": False, "data": {
-                "title": "Error al crear notificación",
-                "message": str(e),
-            }}
-        )
-
-def mark_notifications_as_read(self, user_id: int, notification_ids: List[int] = None, mark_all: bool = False):
-    """
-    Mark specific or all notifications as read for a user
-    
-    Args:
-        user_id: ID of the user
-        notification_ids: List of notification IDs to mark as read (optional)
-        mark_all: Flag to mark all user's notifications as read
-        
-    Returns:
-        Dictionary with success status and message
-    """
-    try:
-        user = self.db.query(User).filter(User.id == user_id).first()
-        if not user:
-            return {"success": False, "message": "Usuario no encontrado"}
-        
-        if mark_all:
-            # Mark all notifications as read
-            self.db.query(Notification).filter(
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            Dictionary with success status and list of notifications
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return {"success": False, "data": [], "unread_count": 0, "message": "Usuario no encontrado"}
+            
+            notifications = self.db.query(Notification).filter(
                 Notification.user_id == user_id
-            ).update({"read": True})
-        elif notification_ids:
-            # Mark specific notifications as read
-            self.db.query(Notification).filter(
-                Notification.id.in_(notification_ids),
-                Notification.user_id == user_id
-            ).update({"read": True})
-        
-        self.db.commit()
-        return {"success": True, "message": "Notificaciones marcadas como leídas"}
-    except Exception as e:
-        self.db.rollback()
-        raise HTTPException(
-            status_code=500, 
-            detail={"success": False, "data": {
-                "title": "Error al marcar notificaciones como leídas",
-                "message": str(e),
-            }}
-        )
+            ).order_by(desc(Notification.created_at)).all()
+            
+            # Count unread notifications
+            unread_count = self.db.query(Notification).filter(
+                Notification.user_id == user_id,
+                Notification.read == False
+            ).count()
+            
+            return {"success": True, "data": notifications, "unread_count": unread_count}
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail={"success": False, "data": {
+                    "title": "Error al obtener notificaciones",
+                    "message": str(e),
+                }}
+            )
 
-def get_unread_notification_count(self, user_id: int):
-    """
-    Get count of unread notifications for a user
-    
-    Args:
-        user_id: ID of the user
+    def create_notification(self, notification_data: schemas.NotificationCreate):
+        """
+        Create a new notification
         
-    Returns:
-        Dictionary with success status and count
-    """
-    try:
-        count = self.db.query(Notification).filter(
-            Notification.user_id == user_id,
-            Notification.read == False
-        ).count()
+        Args:
+            notification_data: NotificationCreate schema with notification details
+            
+        Returns:
+            Dictionary with success status and created notification ID
+        """
+        try:
+            user = self.db.query(User).filter(User.id == notification_data.user_id).first()
+            if not user:
+                return {"success": False, "data": None, "message": "Usuario no encontrado"}
+            
+            new_notification = Notification(
+                user_id=notification_data.user_id,
+                title=notification_data.title,
+                message=notification_data.message,
+                type=notification_data.type,
+                read=False,
+                created_at=datetime.utcnow()
+            )
+            
+            self.db.add(new_notification)
+            self.db.commit()
+            self.db.refresh(new_notification)
+            
+            return {"success": True, "data": {"id": new_notification.id}}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=500, 
+                detail={"success": False, "data": {
+                    "title": "Error al crear notificación",
+                    "message": str(e),
+                }}
+            )
+
+    def mark_notifications_as_read(self, user_id: int, notification_ids: List[int] = None, mark_all: bool = False):
+        """
+        Mark specific or all notifications as read for a user
         
-        return {"success": True, "count": count}
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, 
-            detail={"success": False, "data": {
-                "title": "Error al obtener conteo de notificaciones",
-                "message": str(e),
-            }}
-        )
+        Args:
+            user_id: ID of the user
+            notification_ids: List of notification IDs to mark as read (optional)
+            mark_all: Flag to mark all user's notifications as read
+            
+        Returns:
+            Dictionary with success status and message
+        """
+        try:
+            user = self.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                return {"success": False, "message": "Usuario no encontrado"}
+            
+            if mark_all:
+                # Mark all notifications as read
+                self.db.query(Notification).filter(
+                    Notification.user_id == user_id
+                ).update({"read": True})
+            elif notification_ids:
+                # Mark specific notifications as read
+                self.db.query(Notification).filter(
+                    Notification.id.in_(notification_ids),
+                    Notification.user_id == user_id
+                ).update({"read": True})
+            
+            self.db.commit()
+            return {"success": True, "message": "Notificaciones marcadas como leídas"}
+        except Exception as e:
+            self.db.rollback()
+            raise HTTPException(
+                status_code=500, 
+                detail={"success": False, "data": {
+                    "title": "Error al marcar notificaciones como leídas",
+                    "message": str(e),
+                }}
+            )
+
+    def get_unread_notification_count(self, user_id: int):
+        """
+        Get count of unread notifications for a user
+        
+        Args:
+            user_id: ID of the user
+            
+        Returns:
+            Dictionary with success status and count
+        """
+        try:
+            count = self.db.query(Notification).filter(
+                Notification.user_id == user_id,
+                Notification.read == False
+            ).count()
+            
+            return {"success": True, "count": count}
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, 
+                detail={"success": False, "data": {
+                    "title": "Error al obtener conteo de notificaciones",
+                    "message": str(e),
+                }}
+            )
