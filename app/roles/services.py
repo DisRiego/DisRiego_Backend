@@ -5,6 +5,9 @@ from sqlalchemy import text , func
 from fastapi import HTTPException
 from app.roles import models, schemas
 from app.users.models import User
+from app.users.schemas import NotificationCreate
+from app.users.services import UserService
+
 
 class PermissionService:
     """Clase para gestionar los permisos"""
@@ -93,6 +96,21 @@ class RoleService:
             self.db.add(db_role)
             self.db.commit()
             self.db.refresh(db_role)
+
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+        
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Nuevo rol creado",
+                    message=f"Se ha creado un nuevo rol: {db_role.name}",
+                    type="role_creation"
+                )
+                user_service.create_notification(notification_data)
+
             return db_role
         except IntegrityError:
             self.db.rollback()
@@ -141,6 +159,21 @@ class RoleService:
             db_role.permissions = permissions
             self.db.commit()
             self.db.refresh(db_role)
+
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+        
+        user_service = UserService(self.db)
+        for admin in admins:
+            notification_data = NotificationCreate(
+                user_id=admin.id,
+                title="Rol actualizado",
+                message=f"El rol '{db_role.name}' ha sido actualizado",
+                type="role_update"
+            )
+            user_service.create_notification(notification_data)
+
             return {
                 "success": True,
                 "message": "Rol editado correctamente",
@@ -256,6 +289,25 @@ class RoleService:
             role.status = new_status
             self.db.commit()
             self.db.refresh(role)
+
+            # Determinar el texto del estado para el mensaje
+            status_text = "habilitado" if new_status == 1 else "inhabilitado"
+        
+            # Notificar a los administradores
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+        
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Estado de rol modificado",
+                    message=f"El rol '{role.name}' ha sido {status_text}",
+                    type="role_status_change"
+            )
+            user_service.create_notification(notification_data)
+
             return {"success": True, "data": "Estado del rol actualizado correctamente."}
         except Exception as e:
             self.db.rollback()
