@@ -1,157 +1,417 @@
-from fastapi import APIRouter, Depends, HTTPException , status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
+from typing import Optional, List
+from datetime import datetime
+from app.roles.models import Role
 from app.database import get_db
 from app.users import schemas
-from app.users.models import ChangeUserStatusRequest
+from app.users.models import ChangeUserStatusRequest, Notification
+from app.users.schemas import (
+    AdminUserCreateRequest,
+    AdminUserCreateResponse,
+    AdminUserUpdateRequest,
+    ActivateAccountResponse,
+    PreRegisterCompleteRequest,
+    PreRegisterResponse,
+    PreRegisterValidationRequest,
+    UpdateUserRequest,
+    UserResponse,
+    UserCreateRequest,
+    ChangePasswordRequest,
+    UserUpdateInfo,
+    FirstLoginProfileUpdate,
+    UserEditRequest,
+    NotificationList,
+    NotificationCreate,
+    MarkReadRequest
+)
 from app.users.services import UserService
-from app.users.schemas import UpdateUserRequest, UserResponse, UserCreateRequest , ChangePasswordRequest , UserUpdateInfo
+from app.auth.services import AuthService
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
-# @router.get("/", response_model=list[UserResponse])
-# def list_users(db: Session = Depends(get_db)):
-#     """
-#     Obtener todos los usuarios.
-#     :param db: Dependencia de la base de datos
-#     :return: Lista de usuarios
-#     """
-#     try:
-#         user_service = UserService(db)
-#         users = user_service.get_users()
-#         return users
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Error al obtener los usuarios: {str(e)}")
+############################################
+# Endpoints para pre-registro y activación #
+############################################
 
-
-@router.post("/update", response_model=dict)
-def update_user(update: UpdateUserRequest, db: Session = Depends(get_db)):
+@router.post("/pre-register/validate", response_model=PreRegisterResponse)
+async def validate_document_for_pre_register(
+    request: PreRegisterValidationRequest,
+    db: Session = Depends(get_db)
+):
     """
-    Actualizar los detalles de un usuario.
-    :param update: Datos del usuario a actualizar
-    :param db: Dependencia de la base de datos
-    :return: Mensaje de éxito o error
+    Valida que el documento exista y esté asociado a un usuario que aún no ha completado el pre-registro.
     """
     try:
         user_service = UserService(db)
-        result = user_service.update_user(
-            update.user_id,
-            update.new_address,
-            update.new_profile_picture,
-            update.new_phone
+        return await user_service.validate_for_pre_register(
+            document_type_id=request.document_type_id,
+            document_number=request.document_number,
+            date_issuance_document=request.date_issuance_document
         )
-        if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
-        return {"success": True, "message": "Usuario actualizado correctamente"}
-    except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
-
-@router.get("/{user_id}")
-def list_user(user_id: int, db: Session = Depends(get_db)):
-    """obtener informacion de un usuario"""
-    try:
-        user_service = UserService(db)
-        return user_service.list_user(user_id)
-    except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar el usuario: {str(e)}")
-    
-@router.get("/")
-def list_users(db: Session = Depends(get_db)):
-    try:
-        user_service = UserService(db)
-        return user_service.list_users()  
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar los usuarios: {str(e)}")
-    
-@router.get("/type-document/", tags=['type-document'])
-def list_types_document(db: Session = Depends(get_db)):
+        raise HTTPException(status_code=500, detail=f"Error en la validación: {str(e)}")
+
+@router.post("/pre-register/complete", response_model=PreRegisterResponse)
+async def complete_pre_register(
+    request: PreRegisterCompleteRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Completa el pre-registro del usuario añadiendo email y contraseña, y envía un correo con enlace de activación.
+    """
+    try:
+        user_service = UserService(db)
+        return await user_service.complete_pre_register(
+            token=request.token,
+            email=request.email,
+            password=request.password
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al completar el pre-registro: {str(e)}")
+
+@router.get("/activate-account/{activation_token}", response_model=ActivateAccountResponse)
+async def activate_account(
+    activation_token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Activa la cuenta del usuario a través del enlace enviado por email.
+    """
+    try:
+        user_service = UserService(db)
+        return await user_service.activate_account(activation_token)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al activar la cuenta: {str(e)}")
+
+####################################
+# Endpoints para usuarios normales #
+####################################
+
+@router.post("/first-login-register", response_model=dict)
+async def register_after_first_login(
+    user_id: int = Form(...),
+    country: str = Form(...),
+    department: str = Form(...),
+    city: int = Form(...),
+    address: str = Form(...),
+    phone: str = Form(...),
+    profile_picture: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Completa el registro del usuario después del primer inicio de sesión.
+    Actualiza los datos básicos: país, departamento, ciudad, dirección, teléfono y, opcionalmente, la foto de perfil.
+    """
+    try:
+        user_service = UserService(db)
+        profile_picture_path = None
+        if profile_picture:
+            profile_picture_path = await user_service.save_profile_picture(profile_picture)
+        return await user_service.complete_first_login_registration(
+            user_id=user_id,
+            country=country,
+            department=department,
+            city=city,
+            address=address,
+            phone=phone,
+            profile_picture=profile_picture_path
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al completar el registro del usuario: {str(e)}")
+
+@router.get("/profile/completion-status/{user_id}")
+def check_profile_completion(user_id: int, db: Session = Depends(get_db)):
+    """
+    Verifica si el usuario ya ha completado su perfil después del primer login.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.check_profile_completion(user_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al verificar el estado del perfil: {str(e)}")
+
+@router.put("/edit-profile/{user_id}", response_model=dict)
+async def edit_profile(
+    user_id: int,
+    update_data: UserEditRequest,  
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Permite a un usuario normal editar su perfil básico: país, departamento, ciudad, dirección y teléfono.
+    """
+    if current_user.get("id") != user_id:
+        raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
+    try:
+        user_service = UserService(db)
+        return await user_service.update_basic_profile(
+            user_id=user_id,
+            country=update_data.country,
+            department=update_data.department,
+            city=update_data.city,
+            address=update_data.address,
+            phone=update_data.phone,
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el perfil: {str(e)}")
+
+@router.put("/update-photo/{user_id}", response_model=dict)
+async def update_photo(
+    user_id: int,
+    profile_picture: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Permite a un usuario normal actualizar su foto de perfil.
+    """
+    if current_user.get("id") != user_id:
+        raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
+    try:
+        user_service = UserService(db)
+        photo_path = await user_service.save_profile_picture(profile_picture)
+        return user_service.update_user(user_id, profile_picture=photo_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar la foto: {str(e)}")
+
+###############################
+# Endpoints para administradores #
+###############################
+
+@router.post("/admin/create", response_model=AdminUserCreateResponse, status_code=status.HTTP_201_CREATED)
+def create_user_by_admin(
+    user_data: AdminUserCreateRequest, 
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Crea un nuevo usuario en el sistema (vía Admin).
+    Campos requeridos:
+      - name, first_last_name, second_last_name,
+      - type_document_id, document_number, date_issuance_document,
+      - birthday, gender_id, roles.
+    """
+    if not current_user.get("rol") or "Administrador" not in [r.get("name") for r in current_user.get("rol", [])]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para crear usuarios")
+    try:
+        user_service = UserService(db)
+        return user_service.create_user_by_admin(
+            name=user_data.name,
+            first_last_name=user_data.first_last_name,
+            second_last_name=user_data.second_last_name,
+            type_document_id=user_data.type_document_id,
+            document_number=user_data.document_number,
+            date_issuance_document=user_data.date_issuance_document,
+            birthday=user_data.birthday,
+            gender_id=user_data.gender_id,
+            roles=user_data.roles,
+            admin_id=current_user["id"]  
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al crear el usuario: {str(e)}")
+
+
+@router.put("/admin/edit/{user_id}", summary="Editar información completa del usuario (Admin)")
+def admin_edit_user(
+    user_id: int,
+    update_data: AdminUserUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Permite a un administrador editar la información completa de un usuario.
+    Campos actualizables:
+      - name, first_last_name, second_last_name,
+      - type_document_id, document_number, date_issuance_document,
+      - birthday, gender_id y roles.
+    """
+    if not current_user.get("rol") or "Administrador" not in [r.get("name") for r in current_user.get("rol", [])]:
+        raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
+    try:
+        user_service = UserService(db)
+        
+        update_fields = {
+            "name": update_data.name,
+            "first_last_name": update_data.first_last_name,
+            "second_last_name": update_data.second_last_name,
+            "type_document_id": update_data.type_document_id,
+            "document_number": update_data.document_number,
+            "date_issuance_document": update_data.date_issuance_document,
+            "birthday": update_data.birthday,
+            "gender_id": update_data.gender_id,    
+        }
+        if update_data.roles:
+            roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
+            update_fields["roles"] = roles_obj
+
+        # Se pasa admin_update=True para generar la notificación correspondiente
+        result = user_service.update_user(user_id, admin_update=True, **update_fields)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+
+
+@router.get("/type-documents", tags=["Users"])
+def get_document_types(db: Session = Depends(get_db)):
+    """
+    Obtiene todos los tipos de documentos disponibles.
+    """
     try:
         user_service = UserService(db)
         return user_service.get_type_documents()
-    except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar los tipos de documentos: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=f"Error al obtener los tipos de documentos: {str(e)}")
+
+@router.get("/genders" , tags=["Users"])
+def get_genders(db: Session = Depends(get_db)):
+    """
+    Obtiene todos los géneros disponibles.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.get_genders()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener los géneros: {str(e)}")
+
 @router.post("/change-user-status/")
-def change_user_status(request: ChangeUserStatusRequest, db: Session = Depends(get_db)):
-    """Cambiar el estado de un usuario"""
+def change_user_status(
+    request: ChangeUserStatusRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Cambia el estado de un usuario.
+    """
     try:
         user_service = UserService(db)
         return user_service.change_user_status(request.user_id, request.new_status)
-    except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al generar el cambio de estado del usuario: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error al cambiar el estado del usuario: {str(e)}")
 
-
-@router.post("/create-user/")
-def create_user(request: UserCreateRequest , db: Session = Depends(get_db)):
-    try:
-        user_service = UserService(db)
-        return user_service.create_user(request)
-    except Exception as e:
-        raise HTTPException(status_code=500 , detail=f"Error al crear el usuario: {e}")
-    
 @router.post("/{user_id}/change-password", response_model=dict)
-def change_password(user_id: int, request: ChangePasswordRequest, db: Session = Depends(get_db)):
+def change_password(
+    user_id: int, 
+    request: ChangePasswordRequest, 
+    db: Session = Depends(get_db)
+):
     """
     Actualiza la contraseña del usuario verificando la contraseña actual.
     """
     try:
         user_service = UserService(db)
         return user_service.change_user_password(user_id, request)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al cambiar la contraseña: {str(e)}")
+
+@router.get("/{user_id}")
+def list_user(user_id: int, db: Session = Depends(get_db)):
+    """
+    Obtiene información detallada de un usuario.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.list_user(user_id)
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al cambiar la contraseña: {str(e)}")
-    
-@router.put("/edit/{user_id}", summary="Editar información del usuario")
-def edit_user(
-    user_id: int,
-    update_data: UserUpdateInfo,
+        raise HTTPException(status_code=500, detail=f"Error al obtener el usuario: {str(e)}")
+
+@router.get("/")
+def list_users(db: Session = Depends(get_db)):
+    """
+    Lista todos los usuarios.
+    """
+    try:
+        user_service = UserService(db)
+        return user_service.list_users()
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al listar los usuarios: {str(e)}")
+
+
+@router.get("/notifications/", response_model=schemas.NotificationList)
+def get_user_notifications(
     db: Session = Depends(get_db),
-    current_user: dict = Depends(UserService.get_current_user)
+    current_user: dict = Depends(AuthService.get_current_user)
 ):
     """
-    Edita ciertos campos del usuario:
-      - name, first_last_name, second_last_name,
-      - type_document_id, document_number y date_issuance_document.
-    
-    Se permite solo si el usuario actual (extraído del token) tiene el permiso "editar_usuario".
+    Get all notifications for the currently logged in user
     """
-    required_permission = "editar_usuario"
+    user_service = UserService(db)
+    return user_service.get_user_notifications(current_user["id"])
 
-    roles = current_user.get("rol", [])
+@router.post("/notifications/mark-read", response_model=dict)
+def mark_notifications_as_read(
+    request: schemas.MarkReadRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Mark notifications as read.
+    If mark_all is true, all notifications will be marked as read.
+    Otherwise, only the notifications with IDs in notification_ids will be marked.
+    """
+    user_service = UserService(db)
+    return user_service.mark_notifications_as_read(
+        user_id=current_user["id"],
+        notification_ids=request.notification_ids,
+        mark_all=request.mark_all
+    )
+
+@router.post("/notifications/", response_model=dict, status_code=status.HTTP_201_CREATED)
+def create_notification(
+    notification: schemas.NotificationCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Create a new notification (admin only)
+    """
+    # Check if the user has admin permissions
+    has_admin_role = False
+    for role in current_user.get("rol", []):
+        if role.get("name") == "Administrador":
+            has_admin_role = True
+            break
     
-
-    all_permissions = []
-    for role in roles:
-        permisos = role.get("permisos", [])
-        all_permissions.extend(permisos)
-    
-
-    if not any(perm.get("name") == required_permission for perm in all_permissions):
+    if not has_admin_role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permiso para editar usuarios."
+            detail={"success": False, "data": "No tiene permisos para crear notificaciones"}
         )
     
     user_service = UserService(db)
-    result = user_service.update_user(
-        user_id,
-        name=update_data.name,
-        first_last_name=update_data.first_last_name,
-        second_last_name=update_data.second_last_name,
-        type_document_id=update_data.type_document_id,
-        document_number=update_data.document_number,
-        date_issuance_document=update_data.date_issuance_document,
-        email = update_data.email
-    )
-    return result
+    return user_service.create_notification(notification)
+
+@router.get("/notifications/unread-count", response_model=dict)
+def get_unread_notification_count(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Get count of unread notifications for the current user
+    """
+    user_service = UserService(db)
+    return user_service.get_unread_notification_count(current_user["id"])
