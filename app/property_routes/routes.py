@@ -120,8 +120,8 @@ def update_property_state(
 ):
     """
     Cambia el estado del predio.
-    new_state: true (activar → state = 16) o false (desactivar → state = 17).
-    Si se intenta desactivar y hay lotes asociados activos (state == 18), se rechaza.
+    new_state: true (activar → state = 3) o false (desactivar → state = 4).
+    Si se intenta desactivar y hay lotes asociados activos (state == 5), se rechaza.
     """
     try:
         property_service = PropertyLotService(db)
@@ -147,8 +147,8 @@ def update_lot_state(
 ):
     """
     Cambia el estado del lote.
-    new_state: true (activar → state = 18) o false (desactivar → state = 19).
-    Al activar, se valida que el predio asociado esté activo (state == 16).
+    new_state: true (activar → state = 5) o false (desactivar → state = 6).
+    Al activar, se valida que el predio asociado esté activo (state == 3).
     """
     try:
         property_service = PropertyLotService(db)

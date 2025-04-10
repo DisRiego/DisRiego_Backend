@@ -14,7 +14,7 @@ class Property(Base):
     real_estate_registration_number = Column(Integer, nullable=False)
     public_deed = Column(String, nullable=True)
     freedom_tradition_certificate = Column(String, nullable=True)
-    state = Column("State", Integer, ForeignKey("vars.id"), default=16, nullable=False)
+    state = Column("State", Integer, ForeignKey("vars.id"), default=3, nullable=False)
 
     def __repr__(self):
         return f"<Property(id={self.id}, name={self.name}, state={self.state})>"
@@ -35,7 +35,7 @@ class Lot(Base):
     type_crop_id = Column(Integer, ForeignKey('type_crop.id'), nullable=True)
     planting_date = Column(Date, nullable=True)
     estimated_harvest_date = Column(Date, nullable=True)
-    state = Column("State", Integer, ForeignKey("vars.id"), default=18, nullable=False)
+    state = Column("State", Integer, ForeignKey("vars.id"), default=5, nullable=False)
 
     type_crop = relationship("TypeCrop", back_populates="lots")
 

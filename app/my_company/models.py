@@ -70,7 +70,7 @@ class DigitalCertificate(Base):
     attached = Column(String(255), nullable=False)
     nit = Column(Integer, nullable=False)  
     # Columna para el estado del certificado (22: Activo, 23: Inactivo)
-    status_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=22)
+    status_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=9)
 
     # Relación para acceder al nombre del estado sin llamar directamente a Vars en los servicios
     status = relationship("Vars", foreign_keys=[status_id])
@@ -90,7 +90,7 @@ class TypeCrop(Base):
     harvest_time = Column(Integer, nullable=False)
     payment_interval_id = Column(Integer, ForeignKey("payment_interval.id"), nullable=False)
     # Nueva columna que relaciona con la tabla vars:
-    state_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=20)
+    state_id = Column(Integer, ForeignKey("vars.id"), nullable=False, default=7)
     
     # Relaciones
     payment_interval = relationship("PaymentInterval")

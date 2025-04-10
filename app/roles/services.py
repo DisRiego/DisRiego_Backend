@@ -5,6 +5,9 @@ from sqlalchemy import text , func
 from fastapi import HTTPException
 from app.roles import models, schemas
 from app.users.models import User
+from app.users.schemas import NotificationCreate
+from app.users.services import UserService
+
 
 class PermissionService:
     """Clase para gestionar los permisos"""
@@ -93,6 +96,21 @@ class RoleService:
             self.db.add(db_role)
             self.db.commit()
             self.db.refresh(db_role)
+
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+        
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Nuevo rol creado",
+                    message=f"Se ha creado un nuevo rol: {db_role.name}",
+                    type="role_creation"
+                )
+                user_service.create_notification(notification_data)
+
             return db_role
         except IntegrityError:
             self.db.rollback()
@@ -110,6 +128,7 @@ class RoleService:
                     status_code=404,
                     detail={"success": False, "data": "El rol no existe."}
                 )
+
             # Verificar si ya existe otro rol con el mismo nombre
             existing_role = self.db.query(models.Role).filter(
                 func.lower(models.Role.name) == role_data.name.lower(),
@@ -120,6 +139,7 @@ class RoleService:
                     status_code=400,
                     detail={"success": False, "data": "El rol ya existe."}
                 )
+
             db_role.name = role_data.name
             db_role.description = role_data.description
 
@@ -128,6 +148,7 @@ class RoleService:
                     status_code=400,
                     detail={"success": False, "data": "El rol debe tener al menos un permiso asignado."}
                 )
+
             permissions = self.db.query(models.Permission).filter(
                 models.Permission.id.in_(role_data.permissions)
             ).all()
@@ -138,26 +159,43 @@ class RoleService:
                     status_code=400,
                     detail={"success": False, "data": f"Los siguientes permisos no existen: {list(missing_permissions)}"}
                 )
+
             db_role.permissions = permissions
             self.db.commit()
             self.db.refresh(db_role)
+
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Rol actualizado",
+                    message=f"El rol '{db_role.name}' ha sido actualizado",
+                    type="role_update"
+                )
+                user_service.create_notification(notification_data)
+
             return {
                 "success": True,
                 "message": "Rol editado correctamente",
                 "data": db_role
             }
+
         except IntegrityError:
             self.db.rollback()
             raise HTTPException(status_code=400, detail="El rol ya existe.")
         except SQLAlchemyError:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail="Error al editar el rol.")
-            
+            raise HTTPException(status_code=500, detail="Error al editar el rol.")    
+    
+
     def get_roles(self):
         """Obtener todos los roles con manejo de errores"""
         try:
-            # Realizamos la consulta SQL para obtener los roles y el estado asociado
-            
+            # Consulta modificada: se usa DISTINCT en el string_agg para evitar duplicados
             query = """
                 SELECT
                     r.id AS role_id,
@@ -165,11 +203,8 @@ class RoleService:
                     r.description AS role_description,
                     v.name AS status_name,
                     r.status,
-                    COUNT(DISTINCT ur.id) AS quantity_users,
-                    string_agg(
-                        DISTINCT CONCAT(p.id, ':::::', p.name, ':::::', p.description),
-                        ','
-                    ) FILTER (WHERE p.id IS NOT NULL) AS permissions
+                    COUNT(DISTINCT ur.user_id) AS quantity_users,
+                    COALESCE(string_agg(DISTINCT CONCAT(p.id, ':::::', p.name, ':::::', p.description), ','), '') AS permissions
                 FROM
                     rol r
                     LEFT JOIN user_rol ur ON ur.rol_id = r.id
@@ -183,24 +218,18 @@ class RoleService:
                     v.name,
                     r.status
             """
-            # Ejecutamos la consulta SQL y obtenemos el resultado como una lista de diccionarios
             roles = self.db.execute(text(query)).fetchall()
-            
-            # Procesar el resultado
+
             roles_data = []
             for role in roles:
-                # Procesar la cadena de permisos
                 permissions = []
                 if role.permissions:
-                    # Split by comma and extract ID, Name and Description for each permission
                     for permission_str in role.permissions.split(','):
                         if ':::::' not in permission_str:
-                            continue  # Saltar valores incorrectos
-
+                            continue
                         parts = permission_str.split(':::::')
                         if len(parts) != 3:
-                            continue  # Evitar errores si no hay exactamente 3 partes
-
+                            continue
                         perm_id, perm_name, perm_description = parts
                         permissions.append({
                             "id": int(perm_id),
@@ -208,7 +237,6 @@ class RoleService:
                             "description": perm_description
                         })
 
-                # Construir el diccionario con los detalles del rol
                 role_data = {
                     "role_id": role.role_id,
                     "role_name": role.role_name,
@@ -216,13 +244,15 @@ class RoleService:
                     "status_name": role.status_name,
                     "status": role.status,
                     "quantity_users": role.quantity_users,
-                    "permissions": permissions  # Lista de permisos con id, name y description
+                    "permissions": permissions
                 }
                 roles_data.append(role_data)
-            
+
             return {"success": True, "data": roles_data}
         except Exception as e:
-            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles."+str(e)})
+            raise HTTPException(status_code=500, detail={"success": False, "data": "Error al obtener los roles." + str(e)})
+
+
         
     def get_rol(self, role_id):
         """Obtener detalles de un rol con manejo de errores"""
@@ -265,6 +295,25 @@ class RoleService:
             role.status = new_status
             self.db.commit()
             self.db.refresh(role)
+
+            # Determinar el texto del estado para el mensaje
+            status_text = "habilitado" if new_status == 1 else "inhabilitado"
+        
+            # Notificar a los administradores
+            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
+                models.Role.name == "Administrador"
+            ).all()
+        
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Estado de rol modificado",
+                    message=f"El rol '{role.name}' ha sido {status_text}",
+                    type="role_status_change"
+            )
+            user_service.create_notification(notification_data)
+
             return {"success": True, "data": "Estado del rol actualizado correctamente."}
         except Exception as e:
             self.db.rollback()

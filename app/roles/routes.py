@@ -31,7 +31,7 @@ def create_role(role: schemas.RoleCreate, db: Session = Depends(get_db)):
 @router.post("/{role_id}/edit", response_model=schemas.EditRoleResponse)
 def edit_rol(role_id: int, role: schemas.RoleCreate, db: Session = Depends(get_db)):
     role_service = services.RoleService(db)
-    return role_service.edit_rol(role_id, role)
+    return role_service.edit_role(role_id, role)
 
 
 @router.post("/change-rol-status/")

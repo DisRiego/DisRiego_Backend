@@ -6,7 +6,7 @@ from datetime import datetime
 from app.roles.models import Role
 from app.database import get_db
 from app.users import schemas
-from app.users.models import ChangeUserStatusRequest
+from app.users.models import ChangeUserStatusRequest, Notification
 from app.users.schemas import (
     AdminUserCreateRequest,
     AdminUserCreateResponse,
@@ -21,7 +21,10 @@ from app.users.schemas import (
     ChangePasswordRequest,
     UserUpdateInfo,
     FirstLoginProfileUpdate,
-    UserEditRequest
+    UserEditRequest,
+    NotificationList,
+    NotificationCreate,
+    MarkReadRequest
 )
 from app.users.services import UserService
 from app.auth.services import AuthService
@@ -221,12 +224,14 @@ def create_user_by_admin(
             date_issuance_document=user_data.date_issuance_document,
             birthday=user_data.birthday,
             gender_id=user_data.gender_id,
-            roles=user_data.roles
+            roles=user_data.roles,
+            admin_id=current_user["id"]  
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el usuario: {str(e)}")
+
 
 @router.put("/admin/edit/{user_id}", summary="Editar información completa del usuario (Admin)")
 def admin_edit_user(
@@ -246,23 +251,27 @@ def admin_edit_user(
         raise HTTPException(status_code=403, detail="No tiene permisos para editar este usuario")
     try:
         user_service = UserService(db)
-        result = user_service.update_user(
-            user_id,
-            name=update_data.name,
-            first_last_name=update_data.first_last_name,
-            second_last_name=update_data.second_last_name,
-            type_document_id=update_data.type_document_id,
-            document_number=update_data.document_number,
-            date_issuance_document=update_data.date_issuance_document,
-            birthday=update_data.birthday,
-            gender_id=update_data.gender_id,    
-        )
+        
+        update_fields = {
+            "name": update_data.name,
+            "first_last_name": update_data.first_last_name,
+            "second_last_name": update_data.second_last_name,
+            "type_document_id": update_data.type_document_id,
+            "document_number": update_data.document_number,
+            "date_issuance_document": update_data.date_issuance_document,
+            "birthday": update_data.birthday,
+            "gender_id": update_data.gender_id,    
+        }
         if update_data.roles:
             roles_obj = db.query(Role).filter(Role.id.in_(update_data.roles)).all()
-            result = user_service.update_user(user_id, roles=roles_obj)
+            update_fields["roles"] = roles_obj
+
+        # Se pasa admin_update=True para generar la notificación correspondiente
+        result = user_service.update_user(user_id, admin_update=True, **update_fields)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al actualizar el usuario: {str(e)}")
+
 
 @router.get("/type-documents", tags=["Users"])
 def get_document_types(db: Session = Depends(get_db)):
@@ -340,3 +349,69 @@ def list_users(db: Session = Depends(get_db)):
         raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al listar los usuarios: {str(e)}")
+
+
+@router.get("/notifications/", response_model=schemas.NotificationList)
+def get_user_notifications(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Get all notifications for the currently logged in user
+    """
+    user_service = UserService(db)
+    return user_service.get_user_notifications(current_user["id"])
+
+@router.post("/notifications/mark-read", response_model=dict)
+def mark_notifications_as_read(
+    request: schemas.MarkReadRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Mark notifications as read.
+    If mark_all is true, all notifications will be marked as read.
+    Otherwise, only the notifications with IDs in notification_ids will be marked.
+    """
+    user_service = UserService(db)
+    return user_service.mark_notifications_as_read(
+        user_id=current_user["id"],
+        notification_ids=request.notification_ids,
+        mark_all=request.mark_all
+    )
+
+@router.post("/notifications/", response_model=dict, status_code=status.HTTP_201_CREATED)
+def create_notification(
+    notification: schemas.NotificationCreate,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Create a new notification (admin only)
+    """
+    # Check if the user has admin permissions
+    has_admin_role = False
+    for role in current_user.get("rol", []):
+        if role.get("name") == "Administrador":
+            has_admin_role = True
+            break
+    
+    if not has_admin_role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"success": False, "data": "No tiene permisos para crear notificaciones"}
+        )
+    
+    user_service = UserService(db)
+    return user_service.create_notification(notification)
+
+@router.get("/notifications/unread-count", response_model=dict)
+def get_unread_notification_count(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
+):
+    """
+    Get count of unread notifications for the current user
+    """
+    user_service = UserService(db)
+    return user_service.get_unread_notification_count(current_user["id"])
