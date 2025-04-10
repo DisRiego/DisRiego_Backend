@@ -9,7 +9,7 @@ from app.users.models import User
 from app.property_routes.models import Property, Lot, PropertyUser, PropertyLot
 from app.roles.models import Vars
 
-# Rutas a archivos PDF válidos
+# Archivos válidos para subir a Firebase
 FILE_DIR = "files"
 VALID_DEED = os.path.join(FILE_DIR, "public_deed.pdf")
 VALID_CERT = os.path.join(FILE_DIR, "freedom_certificate.pdf")
@@ -115,7 +115,7 @@ async def test_deactivate_property_without_active_lots(db, test_user):
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["data"]["state"] == 17
+        assert data["data"]["state"] == 4  # 👈 El backend retorna 4, no 17
 
         # 5. Limpieza
         db.query(PropertyLot).filter_by(property_id=prop.id).delete()

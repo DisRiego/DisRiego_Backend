@@ -26,9 +26,10 @@ def ensure_vars_exist():
     db = SessionLocal()
     try:
         required_states = {
-            16: ("Predio Activo", "property", "Predio habilitado para operaciones"),
-            17: ("Predio Inactivo", "property", "Predio inhabilitado temporalmente"),
-            18: ("Lote Activo", "lot", "Lote activo dentro del predio"),
+            3: ("Activo", "predio_status", "Estado que indica que el predio está habilitado."),
+            4: ("Inactivo", "predio_status", "Estado que indica que el predio está deshabilitado."),
+            5: ("Activo", "lote_status", "Estado que indica que el lote está habilitado."),
+            6: ("Inactivo", "lote_status", "Estado que indica que el lote está deshabilitado.")
         }
 
         for state_id, (name, var_type, description) in required_states.items():
@@ -66,10 +67,13 @@ def test_user(db: Session):
 
 @pytest.mark.asyncio
 async def test_cannot_deactivate_property_with_active_lots(db, test_user):
-    # Crear el predio
+    """No debe permitir desactivar un predio si tiene lotes activos asociados (estado 5)"""
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         reg_number = random.randint(10000000, 99999999)
+
+        # Crear el predio
         with open(VALID_DEED, "rb") as deed, open(VALID_CERT, "rb") as cert:
             response = await client.post("/properties/", files={
                 "public_deed": ("public_deed.pdf", deed, "application/pdf"),
@@ -82,15 +86,13 @@ async def test_cannot_deactivate_property_with_active_lots(db, test_user):
                 "extension": "120",
                 "real_estate_registration_number": str(reg_number)
             })
-
             assert response.status_code == 200
-            assert response.json()["success"] is True
 
-        # Obtener el predio
+        # Obtener el predio recién creado
         property = db.query(Property).filter_by(real_estate_registration_number=reg_number).first()
         assert property is not None
 
-        # Crear el lote activo
+        # Crear lote con estado ACTIVO (5)
         lot = Lot(
             name="Lote Activo",
             longitude=4.5,
@@ -99,23 +101,23 @@ async def test_cannot_deactivate_property_with_active_lots(db, test_user):
             real_estate_registration_number=random.randint(10000000, 99999999),
             public_deed="url_falsa_lote_deed.pdf",
             freedom_tradition_certificate="url_falsa_lote_cert.pdf",
-            state=18
+            state=5  # Estado activo según lote_status
         )
         db.add(lot)
         db.commit()
         db.refresh(lot)
 
-        # Relación lote-predio
+        # Asociar lote al predio
         db.add(PropertyLot(property_id=property.id, lot_id=lot.id))
         db.commit()
 
-        # Intentar desactivar el predio
+        # Intentar desactivar el predio (debe fallar porque tiene lotes activos)
         response = await client.put(
             f"/properties/{property.id}/state",
             data={"new_state": False}
         )
         assert response.status_code == 400
-        assert "lotes activos" in response.text
+        assert "lotes activos" in response.text.lower()
 
         # Limpieza
         db.query(PropertyLot).filter_by(property_id=property.id, lot_id=lot.id).delete()

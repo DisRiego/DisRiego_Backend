@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.database import SessionLocal
 from app.my_company.models import ColorPalette, DigitalCertificate, Company, CompanyCertificate
+from app.roles.models import Vars
 from datetime import date, timedelta
 import os
 
@@ -20,6 +21,15 @@ def db():
 
 @pytest.mark.asyncio
 async def test_update_company_basic_info(db: Session):
+    # 🧩 Asegurar que el estado "Activo" (id=22) existe en `vars`
+    active_status = db.query(Vars).filter(Vars.id == 22).first()
+    created_status = False
+    if not active_status:
+        active_status = Vars(id=22, name="Activo", type="certificate_status")
+        db.add(active_status)
+        db.commit()
+        created_status = True
+
     # 🖌 Crear paleta de colores temporal
     palette = ColorPalette(
         primary_color="#101010",
@@ -64,7 +74,7 @@ async def test_update_company_basic_info(db: Session):
     db.commit()
     db.refresh(company)
 
-    # Crear relación CompanyCertificate (si aplica)
+    # Crear relación CompanyCertificate
     company_cert = CompanyCertificate(
         company_id=company.id,
         digital_certificate_id=certificate.id
@@ -93,4 +103,6 @@ async def test_update_company_basic_info(db: Session):
     db.delete(company)
     db.delete(certificate)
     db.delete(palette)
+    if created_status:
+        db.delete(active_status)
     db.commit()

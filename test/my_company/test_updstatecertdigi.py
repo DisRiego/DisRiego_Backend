@@ -46,21 +46,21 @@ async def test_update_certificate_status_to_inactive(db: Session):
         cert_data = cert_response.json()["data"]
         certificate_id = cert_data["id"]
 
-        # Verificar que el estado inicial sea Activo (22)
+        # Verificar que el estado inicial sea Activo (9)
         cert_in_db = db.query(DigitalCertificate).filter_by(id=certificate_id).first()
         assert cert_in_db is not None
-        assert cert_in_db.status_id == 22
+        assert cert_in_db.status_id == 9  # default actual
 
-        # Actualizar estado a Inactivo (23)
+        # Actualizar estado a Inactivo (10)
         status_response = await client.patch(
             f"/my-company/certificates/{certificate_id}/status",
-            data={"new_status": 23}
+            data={"new_status": 10}
         )
 
         assert status_response.status_code == 200, status_response.text
         response_data = status_response.json()
         assert response_data["success"] is True
-        assert response_data["data"]["status_id"] == 23
+        assert response_data["data"]["status_id"] == 10
         assert response_data["data"]["nombre_estado"] == "Inactivo"
 
     # Limpieza

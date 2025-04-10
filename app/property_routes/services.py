@@ -5,6 +5,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from app.property_routes.models import Property, Lot, PropertyLot, PropertyUser
 from sqlalchemy.orm import Session
+from app.roles import models
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
 from app.users.models import User
 from app.users.schemas import NotificationCreate
@@ -13,7 +14,6 @@ from datetime import date
 from app.roles.models import Vars
 from app.firebase_config import bucket
 from app.my_company.models import TypeCrop, PaymentInterval
-
 
 class PropertyLotService:
     def __init__(self, db: Session):

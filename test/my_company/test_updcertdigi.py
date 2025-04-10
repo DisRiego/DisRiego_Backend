@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.database import SessionLocal
 from app.my_company.models import DigitalCertificate
+from app.roles.models import Vars
 from datetime import date, timedelta
 import os
 import random
@@ -22,6 +23,13 @@ def db():
 
 @pytest.mark.asyncio
 async def test_update_digital_certificate(db: Session):
+    # 🧩 Asegurar que exista el estado Activo (id=22)
+    active_status = db.query(Vars).filter(Vars.id == 22).first()
+    if not active_status:
+        active_status = Vars(id=22, name="Activo", type="estado_certificado")
+        db.add(active_status)
+        db.commit()
+
     # Crear un certificado original para luego actualizarlo
     original_serial = random.randint(10000000, 99999999)
     original_nit = random.randint(100000000, 999999999)

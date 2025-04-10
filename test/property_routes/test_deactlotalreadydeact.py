@@ -5,11 +5,6 @@ from app.main import app
 from app.database import SessionLocal
 from app.users.models import User
 from app.property_routes.models import Property, PropertyUser, Lot, PropertyLot
-from app.roles.models import Vars
-from app.firebase_config import FIREBASE_STORAGE_BUCKET
-
-VALID_DEED = "files/public_deed.pdf"
-VALID_CERT = "files/freedom_certificate.pdf"
 
 @pytest.mark.asyncio
 async def test_deactivate_already_inactive_lot():
@@ -20,14 +15,14 @@ async def test_deactivate_already_inactive_lot():
             name="LoteInactivo",
             first_last_name="Prueba",
             second_last_name="Usuario",
-            document_number=str(random.randint(100000000, 999999999)),  # Aseguramos un valor de 9 dígitos
+            document_number=str(random.randint(100000000, 999999999)),
             type_document_id=1
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-        # Crear predio (Aseguramos que el predio tenga estado 16 para que esté activo)
+        # Crear predio con estado 3 (Activo en predio_status)
         property_ = Property(
             name="Predio Activo",
             longitude=-75.0,
@@ -36,51 +31,46 @@ async def test_deactivate_already_inactive_lot():
             real_estate_registration_number=random.randint(10000000, 99999999),
             public_deed="https://url.test/deed.pdf",
             freedom_tradition_certificate="https://url.test/cert.pdf",
-            state=16  # Estado 16 significa activo
+            state=3
         )
         db.add(property_)
         db.commit()
         db.refresh(property_)
 
-        # Relacionar usuario con predio
         db.add(PropertyUser(user_id=user.id, property_id=property_.id))
         db.commit()
 
-        # Crear lote con estado 19 (inactivo) y asociarlo al predio
+        # Crear lote ya inactivo (state = 6)
         lot = Lot(
-            name="Lote de Prueba Inactivo",
+            name="Lote Inactivo",
             longitude=-75.2,
             latitude=6.1,
             extension=150,
-            real_estate_registration_number=random.randint(10000000, 99999999),  # Aseguramos valor de 9 dígitos
-            state=19  # Estado 19 significa inactivo
+            real_estate_registration_number=random.randint(10000000, 99999999),
+            state=6
         )
         db.add(lot)
         db.commit()
         db.refresh(lot)
 
-        # Relacionar lote con predio
-        property_lot = PropertyLot(
-            property_id=property_.id,
-            lot_id=lot.id
-        )
-        db.add(property_lot)
+        db.add(PropertyLot(property_id=property_.id, lot_id=lot.id))
         db.commit()
 
-        # Intentar desactivar el lote nuevamente (lo cual no debería ser permitido porque ya está inactivo)
+        # Intentar desactivar un lote ya inactivo
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.put(f"/properties/lot/{lot.id}/state", data={
-                "new_state": False  # Intentamos desactivar el lote que ya está inactivo
+                "new_state": False
             })
 
-            # Verificamos que la respuesta sea exitosa (estado 200) y que el lote no haya cambiado de estado
+            # Debe seguir siendo exitoso pero no cambiar estado
             assert response.status_code == 200
-            assert response.json()["data"]["state"] == 19  # El lote debería seguir inactivo (19)
+            assert response.json()["success"] is True
+            assert response.json()["data"]["state"] == 6
 
-            # Verificar que el estado del lote siga siendo inactivo
+            # Validar en base de datos
             db.refresh(lot)
-            assert lot.state == 19  # Verificamos que el lote siga inactivo
+            assert lot.state == 6
 
         # Limpieza
         db.query(PropertyLot).filter_by(lot_id=lot.id).delete()

@@ -5,7 +5,6 @@ from app.main import app
 from app.database import SessionLocal
 from app.users.models import User
 from app.property_routes.models import Property, PropertyUser
-from app.roles.models import Vars
 import random
 import os
 
@@ -21,20 +20,6 @@ def db():
         yield db
     finally:
         db.close()
-
-@pytest.fixture(scope="module")
-def ensure_states_exist():
-    """Crea los estados 16 (Activo) y 17 (Inactivo) si no existen"""
-    db = SessionLocal()
-    required = {
-        16: ("Predio Activo", "property", "Predio habilitado"),
-        17: ("Predio Inactivo", "property", "Predio desactivado")
-    }
-    for state_id, (name, tipo, desc) in required.items():
-        if not db.query(Vars).filter_by(id=state_id).first():
-            db.add(Vars(id=state_id, name=name, type=tipo, description=desc))
-    db.commit()
-    db.close()
 
 @pytest.fixture()
 def test_user(db: Session):
@@ -62,7 +47,7 @@ def test_user(db: Session):
         db.commit()
 
 @pytest.mark.asyncio
-async def test_activate_inactive_property(ensure_states_exist, db, test_user):
+async def test_activate_inactive_property(db, test_user):
     transport = ASGITransport(app=app)
     reg_number = random.randint(10000000, 99999999)
 
@@ -88,7 +73,7 @@ async def test_activate_inactive_property(ensure_states_exist, db, test_user):
         assert created_property is not None
 
         # Desactivarlo manualmente (simula que ya estaba inactivo)
-        created_property.state = 17  # Inactivo
+        created_property.state = 4  # Inactivo 
         db.commit()
 
         # Activarlo vía API
@@ -100,7 +85,7 @@ async def test_activate_inactive_property(ensure_states_exist, db, test_user):
         assert response.status_code == 200
         response_data = response.json()
         assert response_data["success"] is True
-        assert response_data["data"]["state"] == 16  # Activo
+        assert response_data["data"]["state"] == 3  # Activo 
 
         # Cleanup
         db.query(PropertyUser).filter_by(property_id=created_property.id).delete()
