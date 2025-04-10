@@ -840,7 +840,7 @@ class UserService:
                 message=notification_data.message,
                 type=notification_data.type,
                 read=False,
-                created_at=datetime.utcnow()
+                created_at=datetime.now()
             )
             
             self.db.add(new_notification)
