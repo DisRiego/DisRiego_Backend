@@ -164,21 +164,21 @@ class RoleService:
                 models.Role.name == "Administrador"
             ).all()
         
-        user_service = UserService(self.db)
-        for admin in admins:
-            notification_data = NotificationCreate(
-                user_id=admin.id,
-                title="Rol actualizado",
-                message=f"El rol '{db_role.name}' ha sido actualizado",
-                type="role_update"
-            )
-            user_service.create_notification(notification_data)
+            user_service = UserService(self.db)
+            for admin in admins:
+                notification_data = NotificationCreate(
+                    user_id=admin.id,
+                    title="Rol actualizado",
+                    message=f"El rol '{db_role.name}' ha sido actualizado",
+                    type="role_update"
+                )
+                user_service.create_notification(notification_data)
 
-            return {
-                "success": True,
-                "message": "Rol editado correctamente",
-                "data": db_role
-            }
+                return {
+                    "success": True,
+                    "message": "Rol editado correctamente",
+                    "data": db_role
+                }
         except IntegrityError:
             self.db.rollback()
             raise HTTPException(status_code=400, detail="El rol ya existe.")
