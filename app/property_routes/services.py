@@ -10,7 +10,7 @@ from app.users.models import User
 from app.users.schemas import NotificationCreate
 from app.users.services import UserService
 from datetime import date
-from app.roles.models import Vars
+from app.roles.models import Vars , Role, user_role_table
 from app.firebase_config import bucket
 from app.my_company.models import TypeCrop, PaymentInterval
 
@@ -203,8 +203,8 @@ class PropertyLotService:
             user_service.create_notification(notification_data)
             
             # Notificar a los administradores
-            admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
-                models.Role.name == "Administrador"
+            admins = self.db.query(User).join(user_role_table).join(Role).filter(
+                Role.name == "Administrador"
             ).all()
             
             for admin in admins:
