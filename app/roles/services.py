@@ -167,7 +167,7 @@ class RoleService:
             admins = self.db.query(User).join(models.user_role_table).join(models.Role).filter(
                 models.Role.name == "Administrador"
             ).all()
-
+        
             user_service = UserService(self.db)
             for admin in admins:
                 notification_data = NotificationCreate(
@@ -178,12 +178,11 @@ class RoleService:
                 )
                 user_service.create_notification(notification_data)
 
-            return {
-                "success": True,
-                "message": "Rol editado correctamente",
-                "data": db_role
-            }
-
+                return {
+                    "success": True,
+                    "message": "Rol editado correctamente",
+                    "data": db_role
+                }
         except IntegrityError:
             self.db.rollback()
             raise HTTPException(status_code=400, detail="El rol ya existe.")
