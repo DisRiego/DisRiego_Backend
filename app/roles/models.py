@@ -60,7 +60,7 @@ class Vars(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String)
-    type = Column(String, nullable=False, default="default")
+    type = Column(String, nullable=False)
     
     # Llave foránea a Role
     # role_id = Column(Integer, ForeignKey('roles.id'))

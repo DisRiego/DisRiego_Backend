@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.property_routes.services import PropertyLotService
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
+from datetime import datetime
+
 
 router = APIRouter(prefix="/properties", tags=["Properties"])
 
@@ -32,29 +34,50 @@ async def create_property(
             freedom_tradition_certificate=freedom_tradition_certificate
         )
 
-        return result  # El resultado es devuelto como un diccionario
+        return result  
 
     except HTTPException as e:
-        raise e  # Re-lanzamos la excepción si ya se manejó aquí
+        raise e  
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
+
+@router.post("/user-search/", response_model=dict)
+async def search_user_by_document(
+    document_type: int = Form(...),
+    document_number: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Busca un usuario por tipo y número de documento.
+    Retorna: user_id, name, first_lastname y second_lastname.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.search_user_by_document(
+            document_type=document_type,
+            document_number=document_number
+        )
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en la búsqueda: {str(e)}")
 
 
 @router.post("/lot/", response_model=dict)
 async def create_lot(
     property_id: int = Form(...),
-    name: str = Form(...),  # Usamos Form para los campos de texto
+    name: str = Form(...),  
     longitude: float = Form(...),
     latitude: float = Form(...),
     extension: float = Form(...),
     real_estate_registration_number: int = Form(...),
-    freedom_tradition_certificate: UploadFile = File(...),  # Archivos obligatorios
+    freedom_tradition_certificate: UploadFile = File(...),  
     public_deed: UploadFile = File(...),
-    db: Session = Depends(get_db)  # Dependencia de la base de datos
+    db: Session = Depends(get_db)  
 ):
     try:
-        # Creamos una instancia del servicio para manejar la lógica
+       
         property_service = PropertyLotService(db)
         result = await property_service.create_lot(
             property_id=property_id,
@@ -64,16 +87,116 @@ async def create_lot(
             extension=extension,
             real_estate_registration_number=real_estate_registration_number,
             public_deed=public_deed,
-            freedom_tradition_certificate=freedom_tradition_certificate
+            freedom_tradition_certificate=freedom_tradition_certificate,
+
         )
 
-        return result  # El resultado es devuelto como un diccionario
+        return result  
 
     except HTTPException as e:
-        raise e  # Re-lanzamos la excepción si ya se manejó aquí
+        raise e  
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al crear el predio: {str(e)}")
+
+@router.get("/{property_id}", response_model=dict)
+def get_property(property_id: int, db: Session = Depends(get_db)):
+    """
+    Obtener la información de un predio específico por su ID.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.get_property_by_id(property_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el predio: {str(e)}")
+    
+@router.put("/{property_id}/state", response_model=dict)
+def update_property_state(
+    property_id: int,
+    new_state: bool = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambia el estado del predio.
+    new_state: true (activar → state = 3) o false (desactivar → state = 4).
+    Si se intenta desactivar y hay lotes asociados activos (state == 5), se rechaza.
+    """
+    try:
+        property_service = PropertyLotService(db)
+        updated_property = property_service.update_property_state(property_id, new_state)
+        return {
+            "success": True,
+            "data": {
+                "property_id": updated_property.id,
+                "state": updated_property.state
+            }
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del predio: {str(e)}")
+
+
+@router.put("/lot/{lot_id}/state", response_model=dict)
+def update_lot_state(
+    lot_id: int,
+    new_state: bool = Form(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Cambia el estado del lote.
+    new_state: true (activar → state = 5) o false (desactivar → state = 6).
+    Al activar, se valida que el predio asociado esté activo (state == 3).
+    """
+    try:
+        property_service = PropertyLotService(db)
+        updated_lot = property_service.update_lot_state(lot_id, new_state)
+        return {
+            "success": True,
+            "data": {
+                "lot_id": updated_lot.id,
+                "state": updated_lot.state
+            }
+        }
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al actualizar el estado del lote: {str(e)}")
+
+@router.put("/lot/{lot_id}/edit-crop", response_model=dict)
+async def edit_lot_crop(
+    lot_id: int,
+    type_crop_id: int = Form(...),
+    planting_date: str = Form(...),  
+    payment_interval: int = Form(...),
+    estimated_harvest_date: str = Form(...),  #
+    db: Session = Depends(get_db)
+):
+    """
+    Editar los detalles de cultivo de un lote:
+    - Tipo de cultivo (type_crop_id)
+    - Fecha de siembra (planting_date)
+    - Intervalo de pago (payment_interval)
+    - Fecha estimada de cosecha (estimated_harvest_date)
+    """
+    try:
+        planting_date_obj = datetime.strptime(planting_date, "%Y-%m-%d").date()
+        estimated_harvest_date_obj = datetime.strptime(estimated_harvest_date, "%Y-%m-%d").date()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
+    
+    property_service = PropertyLotService(db)
+    return await property_service.edit_lot_fields(
+        lot_id,
+        payment_interval,
+        type_crop_id,
+        planting_date_obj,
+        estimated_harvest_date_obj
+    )
+
+
 
 @router.get("/")
 def list_properties(db: Session = Depends(get_db)):
@@ -87,6 +210,8 @@ def list_properties(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los predios: {str(e)}")
     
+
+
 @router.get("/{property_id}/lots/")
 def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
     """Obtener todos los lotes de un predio"""
@@ -95,26 +220,54 @@ def list_lots_properties(property_id: int, db: Session = Depends(get_db)):
         lots = property_service.get_lots_property(property_id)
         return lots
     except HTTPException as e:
-        raise e  # Re-raise HTTPException for known errors
+        raise e  
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
     
+@router.get("/user/{user_id}")
+def list_lots_properties(user_id: int, db: Session = Depends(get_db)):
+    """Obtener todos los predios de un usuario"""
+    try:
+        property_service = PropertyLotService(db)
+        properties = property_service.get_properties_for_user(user_id)
+        return properties
+    except HTTPException as e:
+        raise e  
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener los lotes de predios: {str(e)}")
+
+@router.get("/lot/{lot_id}", response_model=dict)
+def get_lot_by_id(lot_id: int, db: Session = Depends(get_db)):
+    """Obtener los datos de un lote por su id, incluyendo el id del predio vinculado."""
+    try:
+        property_service = PropertyLotService(db)
+        return property_service.get_lot_by_id(lot_id)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al obtener el lote: {str(e)}")
+    
+
 @router.put("/lot/{lot_id}", response_model=dict)
-async def update_lot(lot_id: int,
+async def update_lot(
+    lot_id: int,
     name: str = Form(...),
     longitude: float = Form(...),
     latitude: float = Form(...),
     extension: float = Form(...),
     real_estate_registration_number: int = Form(...),
-    public_deed: UploadFile = File(None), freedom_tradition_certificate: UploadFile = File(None), db: Session = Depends(get_db)):
+    public_deed: UploadFile = File(None),  
+    freedom_tradition_certificate: UploadFile = File(None),  
+    db: Session = Depends(get_db)
+):
     property_service = PropertyLotService(db)
     return await property_service.edit_lot(
         lot_id=lot_id,
         name=name,
-        longitude = longitude,
-        latitude = latitude,
-        extension = extension,
-        real_estate_registration_number = real_estate_registration_number,
+        longitude=longitude,
+        latitude=latitude,
+        extension=extension,
+        real_estate_registration_number=real_estate_registration_number,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
     )
@@ -139,4 +292,40 @@ async def update_lot(property_id: int,
         real_estate_registration_number = real_estate_registration_number,
         public_deed=public_deed,
         freedom_tradition_certificate=freedom_tradition_certificate
+    )
+
+
+
+
+@router.put("/lot/{lot_id}/edit-fields", response_model=dict)
+async def update_lot_fields(
+    lot_id: int,
+    payment_interval: int = Form(...),
+    type_crop_id: int = Form(...),
+    planting_date: str = Form(...),  # Recibido como 'YYYY-MM-DD'
+    estimated_harvest_date: str = Form(...),  # Recibido como 'YYYY-MM-DD'
+    db: Session = Depends(get_db)
+):
+    """
+    Endpoint para editar los campos:
+    - payment_interval
+    - type_crop_id
+    - planting_date
+    - estimated_harvest_date
+
+    El campo 'state' permanece inalterable.
+    """
+    try:
+        planting_date_obj = datetime.strptime(planting_date, "%Y-%m-%d").date()
+        estimated_harvest_date_obj = datetime.strptime(estimated_harvest_date, "%Y-%m-%d").date()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Formato de fecha inválido. Use YYYY-MM-DD.")
+
+    property_service = PropertyLotService(db)
+    return await property_service.edit_lot_fields(
+        lot_id=lot_id,
+        payment_interval=payment_interval,
+        type_crop_id=type_crop_id,
+        planting_date=planting_date_obj,
+        estimated_harvest_date=estimated_harvest_date_obj
     )
