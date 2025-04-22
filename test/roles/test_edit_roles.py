@@ -60,20 +60,18 @@ def role_service(db):
     """Instancia del servicio de roles para pruebas"""
     return RoleService(db[0])  # Pasamos solo la sesión de la base de datos
 
-
 def test_edit_role_success(role_service, db):
-    """✅ Prueba la edición exitosa de un rol"""
+    """✅ Prueba la edición exitosa de un rol usando permisos ya existentes"""
     db_session, created_role_ids, created_permission_ids, created_status_ids = db
 
-    # 🔹 Crear un permiso de prueba con nombre único
-    permission_name = f"Edit_Permission_{uuid.uuid4().hex[:8]}"
-    permission = Permission(name=permission_name, description="Permission for editing", category="General")
-    db_session.add(permission)
-    db_session.commit()
-    db_session.refresh(permission)
-    created_permission_ids.append(permission.id)
+    # 🔹 Usar un permiso ya existente
+    permission_id = 3  # "Editar rol"
 
-    # 🔹 Crear un rol de prueba con nombre único y estado 1 (ya asegurado en `vars`)
+    # Verificar que el permiso exista en la base de datos
+    permission = db_session.query(Permission).filter_by(id=permission_id).first()
+    assert permission is not None, f"El permiso con id {permission_id} no existe"
+
+    # 🔹 Crear un rol de prueba con nombre único y estado 1
     role_name = f"Edit_Role_{uuid.uuid4().hex[:8]}"
     role = Role(name=role_name, description="Role to edit", status=1)
     db_session.add(role)
@@ -81,19 +79,21 @@ def test_edit_role_success(role_service, db):
     db_session.refresh(role)
     created_role_ids.append(role.id)
 
-    # 🔹 Editar el rol
-    updated_role_data = RoleCreate(name=role.name, description="Updated description", permissions=[permission.id])
+    # 🔹 Editar el rol usando el permiso existente
+    updated_role_data = RoleCreate(name=role.name, description="Updated description", permissions=[permission_id])
     response = role_service.edit_role(role.id, updated_role_data)
 
     # ✅ Verificaciones
     assert response["success"] is True
     assert response["message"] == "Rol editado correctamente"
-    assert response["data"].description == "Updated description"  # ✅ Acceder correctamente al atributo del objeto `Role`
-    
+    assert response["data"].description == "Updated description"
+
     # 🔹 Verificar en la base de datos que el rol ha sido actualizado correctamente
     updated_role = db_session.query(Role).filter_by(id=role.id).first()
     assert updated_role is not None
     assert updated_role.description == "Updated description"
+    assert any(p.id == permission_id for p in updated_role.permissions)
+
 
 
 def test_edit_role_not_found(role_service):

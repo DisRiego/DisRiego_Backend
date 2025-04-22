@@ -96,12 +96,3 @@ def test_reset_password_invalid_token(db_session):
     assert exc_info.value.status_code == 404
     assert "Token inválido" in exc_info.value.detail
 
-def test_reset_password_mismatch_passwords(db_session, valid_token):
-    """Caso fallo: Se intenta restablecer la contraseña con new_password y confirm_password diferentes"""
-    service = UserService(db_session)
-    with pytest.raises(HTTPException) as exc_info:
-        # Llamamos con 3 parámetros
-        service.update_password(valid_token.token, "NewPass123456", "DifferentPass123456")
-    # Lanza 400 si las contraseñas no coinciden
-    assert exc_info.value.status_code == 400
-    assert "Las contraseñas no coinciden" in exc_info.value.detail

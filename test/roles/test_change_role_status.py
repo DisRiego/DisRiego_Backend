@@ -43,40 +43,44 @@ def role_service(db):
     return RoleService(db[0])  # Pasamos solo la sesión de la base de datos
 
 def test_change_role_status_success(role_service, db):
-    """✅ Prueba cambiar el estado de un rol correctamente"""
+    """✅ Prueba cambiar el estado de un rol correctamente sin duplicar estados existentes"""
     db_session, created_role_ids, created_status_ids = db
 
-    # 🔹 Crear un estado en la tabla `vars` con `type="status"`
-    status = Vars(name="Estado Activo", type="status")
-    db_session.add(status)
-    db_session.commit()
-    db_session.refresh(status)
-    created_status_ids.append(status.id)  # Guardamos el ID del estado creado
+    # 🔍 Buscar estado "Activo" con type "rol_status"
+    status = db_session.query(Vars).filter_by(name="Activo", type="rol_status").first()
+    if not status:
+        status = Vars(name="Activo", type="rol_status")
+        db_session.add(status)
+        db_session.commit()
+        db_session.refresh(status)
+        created_status_ids.append(status.id)
 
-    # 🔹 Crear un rol de prueba con un estado inicial
-    role = Role(name=f"Status_Role_{uuid.uuid4().hex[:8]}", description="Role to test status", status=status.id)
+    # 🔧 Crear un rol con ese estado activo
+    role = Role(name=f"Status_Role_{uuid.uuid4().hex[:8]}", description="Rol para test de estado", status=status.id)
     db_session.add(role)
     db_session.commit()
     db_session.refresh(role)
     created_role_ids.append(role.id)
 
-    # 🔹 Crear otro estado para cambiarlo
-    new_status = Vars(name="Estado Inactivo", type="status")  
-    db_session.add(new_status)
-    db_session.commit()
-    db_session.refresh(new_status)
-    created_status_ids.append(new_status.id)  # Guardamos el ID del nuevo estado creado
+    # 🔍 Buscar estado "Inactivo" con type "rol_status"
+    new_status = db_session.query(Vars).filter_by(name="Inactivo", type="rol_status").first()
+    if not new_status:
+        new_status = Vars(name="Inactivo", type="rol_status")
+        db_session.add(new_status)
+        db_session.commit()
+        db_session.refresh(new_status)
+        created_status_ids.append(new_status.id)
 
-    # 🔹 Cambiar estado del rol
+    # 🚀 Ejecutar cambio de estado
     response = role_service.change_role_status(role.id, new_status.id)
 
     assert response["success"] is True
     assert response["data"] == "Estado del rol actualizado correctamente."
 
-    # 🔹 Verificar que el estado se actualizó en la base de datos
     updated_role = db_session.query(Role).filter_by(id=role.id).first()
-    assert updated_role is not None
-    assert updated_role.status == new_status.id  # Se asegura que el estado cambió
+    assert updated_role.status == new_status.id
+
+
 
 def test_change_role_status_not_found(role_service):
     """❌ Prueba cambiar el estado de un rol inexistente"""
