@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form , BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, List
@@ -311,18 +311,23 @@ def change_user_status(
 
 @router.post("/{user_id}/change-password", response_model=dict)
 def change_password(
-    user_id: int, 
-    request: ChangePasswordRequest, 
-    db: Session = Depends(get_db)
+    user_id: int,
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(AuthService.get_current_user)
 ):
     """
-    Actualiza la contraseña del usuario verificando la contraseña actual.
+    Actualiza la contraseña del usuario verificando la contraseña actual
+    y genera una notificación de seguridad.
+    Sólo el propio usuario puede cambiar su contraseña.
     """
-    try:
-        user_service = UserService(db)
-        return user_service.change_user_password(user_id, request)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al cambiar la contraseña: {str(e)}")
+    
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para cambiar esta contraseña")
+
+    
+    service = UserService(db)
+    return service.change_user_password(user_id, request)
 
 @router.get("/{user_id}")
 def list_user(user_id: int, db: Session = Depends(get_db)):

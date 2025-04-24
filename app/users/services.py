@@ -12,7 +12,7 @@ from sqlalchemy import desc
 from app.users.models import Notification
 from app.users import schemas
 from app.users.models import Gender, Status, TypeDocument, User, PasswordReset, PreRegisterToken, ActivationToken
-from app.users.schemas import UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateResponse, PreRegisterResponse, ActivateAccountResponse
+from app.users.schemas import UserCreateRequest, ChangePasswordRequest, UserUpdateInfo, AdminUserCreateResponse, PreRegisterResponse, ActivateAccountResponse , NotificationCreate
 from app.roles.models import Role
 from Crypto.Protocol.KDF import scrypt
 from passlib.context import CryptContext
@@ -444,42 +444,59 @@ class UserService:
 
 
     def change_user_password(self, user_id: int, password_data: ChangePasswordRequest):
-        """Actualiza la contraseña de un usuario verificando la contraseña actual y genera una notificación."""
+        """
+        Actualiza la contraseña de un usuario verificando la contraseña actual
+        y genera una notificación de tipo 'security'.
+        """
         try:
+            # 1. Verificar existencia de usuario
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
                 raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+            # 2. Verificar que tenga contraseña configurada
             if user.password_salt is None:
                 raise HTTPException(
-                    status_code=400, 
-                    detail="El usuario no tiene una contraseña configurada. Por favor, utilice la opción de recuperación de contraseña."
+                    status_code=400,
+                    detail="El usuario no tiene una contraseña configurada. Usa recuperación de contraseña."
                 )
 
+            # 3. Verificar contraseña actual
             if not self.verify_password(user.password_salt, user.password, password_data.old_password):
                 raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
 
+            # 4. Hashear y guardar nueva contraseña
             new_salt, new_hash = self.hash_password(password_data.new_password)
             user.password = new_hash
             user.password_salt = new_salt
             self.db.commit()
 
-            
-            notification_data = schemas.NotificationCreate(
+            # 5. Crear notificación
+            notification_data = NotificationCreate(
                 user_id=user.id,
                 title="Cambio de contraseña",
                 message="Has actualizado tu contraseña correctamente. Si no realizaste este cambio, contacta con soporte.",
                 type="security"
             )
-            self.create_notification(notification_data)
+            notification_res = self.create_notification(notification_data)
+
+            # 6. LOG de depuración
+            print(f"[DEBUG] change_user_password → create_notification devolvió: {notification_res}")
 
             return {"success": True, "data": "Contraseña actualizada correctamente"}
+
+        except HTTPException:
+            # Propaga errores conocidos
+            raise
         except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=500, detail={"success": False, "data": {
-                "title": "Error al actualizar la contraseña",
-                "message": str(e)
-            }})
+            raise HTTPException(
+                status_code=500,
+                detail={"success": False, "data": {
+                    "title": "Error al actualizar la contraseña",
+                    "message": str(e)
+                }}
+            )
 
 
     async def validate_for_pre_register(self, document_type_id: int, document_number: str, 
