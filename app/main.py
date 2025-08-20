@@ -11,6 +11,7 @@ from app.users.models import ensure_default_genders
 
 # **Configurar FastAPI**
 app = FastAPI( 
+    root_path="/disriego/base",
     title="Distrito de Riego API Gateway - Gestion de usuario",
     description="API Gateway para gestión de usuarios, roles y permisos en el sistema de riego",
     version="1.0.0"
