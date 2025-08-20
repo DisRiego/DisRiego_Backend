@@ -7,8 +7,10 @@ from app.property_routes.models import Property, Lot, PropertyLot, PropertyUser
 from sqlalchemy.orm import Session
 from app.property_routes.schemas import PropertyCreate, PropertyResponse
 from app.users.models import User
+from app.users.schemas import NotificationCreate
+from app.users.services import UserService
 from datetime import date
-from app.roles.models import Vars
+from app.roles.models import Vars , Role, user_role_table
 from app.firebase_config import bucket
 from app.my_company.models import TypeCrop, PaymentInterval
 
@@ -188,6 +190,33 @@ class PropertyLotService:
             self.db.add(property_user)
             self.db.commit()  # Realizar la transacción para la relación
 
+
+            user_service = UserService(self.db)
+            
+            # Notificar al propietario
+            notification_data = NotificationCreate(
+                user_id=user_id,
+                title="Predio creado",
+                message=f"Se ha registrado el predio '{name}' a su nombre",
+                type="property_creation"
+            )
+            user_service.create_notification(notification_data)
+            
+            # Notificar a los administradores
+            admins = self.db.query(User).join(user_role_table).join(Role).filter(
+                Role.name == "Administrador"
+            ).all()
+            
+            for admin in admins:
+                if admin.id != user_id:  # No duplicar para admin que también es propietario
+                    notification_data = NotificationCreate(
+                        user_id=admin.id,
+                        title="Nuevo predio registrado",
+                        message=f"Se ha registrado un nuevo predio: '{name}'",
+                        type="property_creation"
+                    )
+                    user_service.create_notification(notification_data)
+
             return JSONResponse(
                 status_code=200,
                 content={
@@ -245,6 +274,21 @@ class PropertyLotService:
             property_obj.state = 3 if new_state else 4
             self.db.commit()
             self.db.refresh(property_obj)
+
+            state_text = "activado" if new_state else "desactivado"
+            
+            # Buscar el propietario del predio
+            property_user = self.db.query(PropertyUser).filter(PropertyUser.property_id == property_id).first()
+            if property_user:
+                user_service = UserService(self.db)
+                notification_data = NotificationCreate(
+                    user_id=property_user.user_id,
+                    title="Estado del predio actualizado",
+                    message=f"Su predio '{property_obj.name}' ha sido {state_text}",
+                    type="property_status_change"
+                )
+                user_service.create_notification(notification_data)
+
             return property_obj
         except HTTPException as e:
             raise e
@@ -278,6 +322,24 @@ class PropertyLotService:
             lot_obj.state = 5 if new_state else 6
             self.db.commit()
             self.db.refresh(lot_obj)
+
+            # Después de actualizar el estado
+            state_text = "activado" if new_state else "desactivado"
+            
+            # Buscar al propietario del lote a través del predio
+            association = self.db.query(PropertyLot).filter(PropertyLot.lot_id == lot_id).first()
+            if association:
+                property_user = self.db.query(PropertyUser).filter(PropertyUser.property_id == association.property_id).first()
+                if property_user:
+                    user_service = UserService(self.db)
+                    notification_data = NotificationCreate(
+                        user_id=property_user.user_id,
+                        title="Estado del lote actualizado",
+                        message=f"El lote '{lot_obj.name}' ha sido {state_text}",
+                        type="lot_status_change"
+                    )
+                    user_service.create_notification(notification_data)
+
             return lot_obj
         except HTTPException as e:
             raise e
@@ -489,6 +551,19 @@ class PropertyLotService:
             # Agregar la relación entre el lote y la propiedad
             self.db.add(property_lot)
             self.db.commit()  # Realizar la transacción para la relación
+
+
+            # Buscar al propietario del predio
+            property_user = self.db.query(PropertyUser).filter(PropertyUser.property_id == property_id).first()
+            if property_user:
+                user_service = UserService(self.db)
+                notification_data = NotificationCreate(
+                    user_id=property_user.user_id,
+                    title="Lote creado",
+                    message=f"Se ha registrado el lote '{name}' en su predio",
+                    type="lot_creation"
+                )
+                user_service.create_notification(notification_data)
 
             return JSONResponse(
                 status_code=200,

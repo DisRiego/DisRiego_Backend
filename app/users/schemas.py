@@ -254,3 +254,38 @@ class AdminUserUpdateRequest(BaseModel):
         if 'birthday' in values and v < values['birthday']:
             raise ValueError("La fecha de expedición no puede ser anterior a la fecha de nacimiento")
         return v
+
+class NotificationBase(BaseModel):
+    """Base schema for notification data"""
+    title: str
+    message: str
+    type: str
+
+class NotificationCreate(NotificationBase):
+    """Schema for creating a new notification"""
+    user_id: int
+
+class NotificationUpdate(BaseModel):
+    """Schema for updating a notification"""
+    read: Optional[bool] = None
+
+class NotificationResponse(NotificationBase):
+    """Schema for notification response"""
+    id: int
+    user_id: int
+    read: Optional[bool] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+class NotificationList(BaseModel):
+    """Schema for a list of notifications"""
+    success: bool
+    data: List[NotificationResponse]
+    unread_count: int
+
+class MarkReadRequest(BaseModel):
+    """Schema for marking notifications as read"""
+    notification_ids: Optional[List[int]] = None
+    mark_all: bool = False
