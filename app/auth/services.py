@@ -17,6 +17,11 @@ SSO_PUBLIC_KEY_PATH = BASE_DIR / "keys" / "sso_public.pem"
 with open(SSO_PUBLIC_KEY_PATH, "r") as f:
     SSO_PUBLIC_KEY = f.read()
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+SSO_PUBLIC_KEY_PATH = BASE_DIR / "keys" / "sso_public.pem"
+
+with open(SSO_PUBLIC_KEY_PATH, "r") as f:
+    SSO_PUBLIC_KEY = f.read()
 SECRET_KEY = "your_secret_key"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
@@ -28,6 +33,80 @@ class AuthService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    
+    def sso_login(self, sso_token: str):
+        """
+        Autentica un usuario mediante Single Sign-On (SSO).
+
+        Este método valida un token SSO emitido por el sistema de autenticación
+        central (Agrofusion), verifica su firma y claims, y permite iniciar sesión
+        en este sistema sin solicitar credenciales locales.
+        Args:
+            sso_token (str):
+                Token JWT firmado con RS256 emitido por el backend de Agrofusion.
+                Debe contener los claims:
+                    - sub: identificador único del usuario en el sistema origen
+                    - email: correo electrónico del usuario
+                    - iss: agrofusion-auth
+                    - aud: código del proyecto (ej. DISRIEGO)
+
+        Returns:
+            dict:
+                Objeto con el token de acceso del sistema:
+                {
+                    "access_token": "<jwt>",
+                    "token_type": "bearer"
+                }
+
+        Raises:
+            HTTPException(401):
+                Si el token es inválido, está expirado o no cumple con los claims esperados.
+        """
+        
+        try:
+            payload = jwt.decode(
+                sso_token,
+                SSO_PUBLIC_KEY,
+                algorithms=["RS256"],
+                audience="DISRIEGO",
+                issuer="agrofusion-auth"
+            )
+        except JWTError:
+            raise HTTPException(status_code=401, detail="SSO token inválido")
+
+        
+        email = payload["email"]
+
+        user = (
+            self.db.query(User)
+            .options(joinedload(User.roles).joinedload(Role.permissions))
+            .filter(User.email == email)
+            .first()
+        )
+
+        roles = []
+        for role in user.roles:
+            role_data = {"id": role.id, "name": role.name}
+            permisos = [{"id": p.id, "name": p.name} for p in role.permissions]
+            role_data["permisos"] = permisos
+            roles.append(role_data)
+
+        token_data = {
+            "sub": user.email,
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "status_date": datetime.utcnow().isoformat(),
+            "rol": roles,
+            "status": user.status_id,
+            "birthday": user.birthday.isoformat() if user.birthday else None,
+            "first_login_complete": user.first_login_complete
+        }
+
+        access_token = self.create_access_token(token_data)
+        return {"access_token": access_token, "token_type": "bearer"}
+    
 
     def create_access_token(self, data: dict, expires_delta: timedelta = None) -> str:
         """
